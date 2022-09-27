@@ -1,0 +1,30 @@
+{
+  "server_connection": {
+    "Scheme": "http",
+    "Host": "0.0.0.0",
+    "Port": 9999,
+    "SessionCookie": {
+      "Name": "session",
+      "Value": "MTY2NDEyMTA3OXxEdi1CQkFFQ180SUFBUkFCRUFBQVV2LUNBQUlHYzNSeWFXNW5EQWdBQm5WelpYSkpSQVp6ZEhKcGJtY01CZ0FFY205dmRBWnpkSEpwYm1jTUVBQU9kbWx6YVhSbFpGQnNkV2RwYm5NSVcxMXpkSEpwYm1mX2d3SUJBdi1FQUFFTUFBQVVfNFFSQUFFT2JtWnZVMk5sYm1WUVlYSnpaWEk9fMFa5jtglJeuBmzdpFYWR_rHuIYg6PMDpySI0z78sL4D",
+      "Path": "",
+      "Domain": "",
+      "Expires": "0001-01-01T00: 00: 00Z",
+      "RawExpires": "",
+      "MaxAge": 0,
+      "Secure": "False",
+      "HttpOnly": "False",
+      "SameSite": 0,
+      "Raw": "",
+      "Unparsed": "None"
+    },
+    "Dir": "/root/.stash",
+    "PluginDir": "/root/.stash/plugins/nfoSceneParser"
+  },
+  "args": {
+    "hookContext": {
+      "id": 3228,
+      "type": "Scene.Create.Post",
+      "input": "None"
+    }
+  }
+}
