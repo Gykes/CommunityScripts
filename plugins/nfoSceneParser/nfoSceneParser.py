@@ -95,7 +95,7 @@ def parse_nfo_title(nfo_root):
     title = nfo_root.find("title")
     originaltitle = nfo_root.find("originaltitle")
     sorttitle = nfo_root.find("sorttitle")
-    file_title = ""
+    file_title = None
     if title is not None:
         file_title = title.text
     elif originaltitle is not None:
@@ -109,7 +109,7 @@ def parse_nfo_details(nfo_root):
     plot = nfo_root.find("plot")
     outline = nfo_root.find("outline")
     tagline = nfo_root.find("tagline")
-    file_details = ""
+    file_details = None
     if plot is not None:
         file_details = plot.text
     elif outline is not None:
@@ -121,7 +121,7 @@ def parse_nfo_details(nfo_root):
 
 def parse_nfo_rating(nfo_root):
     # rating is converted to a scale of 5 if needed
-    file_rating = ""
+    file_rating = None
     try:
         user_rating = nfo_root.find("userrating")
         if user_rating is not None:
@@ -140,7 +140,7 @@ def parse_nfo_rating(nfo_root):
 
 def parse_nfo_date(nfo_root):
     # date either in full or only the year
-    file_date = ""
+    file_date = None
     try:
         premiered = nfo_root.find("premiered")
         year = nfo_root.find("year")
@@ -169,12 +169,12 @@ def parse_nfo(scene_path):
     file_date = parse_nfo_date(nfo_root)
     # studio
     studio = nfo_root.find("studio")
-    file_studio = ""
+    file_studio = None
     if studio is not None:
         file_studio = studio.text
     # movie
     set = nfo_root.find("set/name")
-    file_movie = ""
+    file_movie = None
     if set is not None:
         file_movie = set.text
     # actor names
@@ -275,6 +275,8 @@ def lookup_create_performers(file_data):
 
 
 def lookup_create_studio(file_data):
+    if file_data["studio"] is None:
+        return
     studio_id = None
     studios = graphql_findStudios(file_data["studio"])
     match_direct = False
@@ -338,6 +340,8 @@ def lookup_create_tags(file_data):
 
 
 def lookup_create_movie(file_data, studio_id, date):
+    if file_data["movie"] is None:
+        return
     movie_id = []
     movies = graphql_findMovies(file_data["movie"])
     matching_id = None
@@ -430,20 +434,22 @@ def graphql_updateScene(scene_id, scene_data):
         }
     }    
     """
-    variables = {
-        "input": {
-            "id": scene_id,
-            "title": scene_data["title"],
-            "details": scene_data["details"],
-            "date": scene_data["date"],
-            "rating": scene_data["rating"],
-            "studio_id": scene_data["studio_id"],
-            "performer_ids": scene_data["performer_ids"],
-            "tag_ids": scene_data["tag_ids"],
-            "movies" : {
+    input = {
+        "id": scene_id,
+        "title": scene_data["title"],
+        "details": scene_data["details"],
+        "date": scene_data["date"],
+        "rating": scene_data["rating"],
+        "studio_id": scene_data["studio_id"],
+        "performer_ids": scene_data["performer_ids"],
+        "tag_ids": scene_data["tag_ids"],
+    }
+    if scene_data["movie_id"] is not None:
+        input["movies"] = {
                 "movie_id": scene_data["movie_id"],
             }
-        }
+    variables = {
+        "input": input
     }
     result = callGraphQL(query, variables)
     return result.get("sceneUpdate")
