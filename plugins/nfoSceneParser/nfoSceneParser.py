@@ -7,9 +7,6 @@ import xml.etree.ElementTree as xml
 from datetime import date
 import config
 import log
-# ! BEGIN TEST DATA
-import requests
-# ! END TEST DATA
 
 '''
 Type definitions for supported NFO file data - For information
@@ -64,12 +61,8 @@ class FileData(TypedDict, total=False):
     year: int
 '''
 
-# TODO: Generic handling of file parsing type: NFO, JSON, REGEX,...
+# TODO: regex parsing,...
 # TODO: Plan for potential substitutions (replace single name actors)
-# TODO: Lookup existing values for performers and studio in main & aliases
-# TODO: Option to create missing performers or studios
-
-# TODO: Skip organized scenes
 
 
 def parse(scene_id):
@@ -89,16 +82,12 @@ def parse(scene_id):
         file_data = parse_re(stash_scene["path"])
     # Retrieve the existing id or create a new entry for satellite data (performers, studios, movies,...)
     scene_data = lookup_create_IDs(file_data)
-    graphql_updateScene(scene_data)
+    graphql_updateScene(scene_id, scene_data)
 
 
 def find_nfo_file(scene_path):
     file_path = os.path.splitext(scene_path)[0]
     nfo_path = "{}.nfo".format(file_path)
-    # ! BEGIN TEST DATA
-    nfo_path = nfo_path.replace(
-        "/data/", "/Users/vince/mnt/rawpriv/Moviez/_STASH-TEST/")
-    # ! END TEST DATA
     return nfo_path
 
 
@@ -156,9 +145,9 @@ def parse_nfo_date(nfo_root):
         premiered = nfo_root.find("premiered")
         year = nfo_root.find("year")
         if premiered is not None:
-            file_date = date.fromisoformat(premiered.text)
+            file_date = premiered.text
         elif year is not None:
-            file_date = date.fromisocalendar(int(year.text), 1, 1)
+            file_date = date.fromisocalendar(int(year.text), 1, 1).isoformat()
     except Exception as e:
         log.LogDebug("Error parsing date: {}".format(e))
     return file_date
@@ -359,7 +348,7 @@ def lookup_create_movie(file_data, studio_id, date):
                 matching_id = movie["id"]
     # Create a new movie when it does not exist
     if matching_id is None:
-        new_movie = graphql_movieCreate(file_data["movie"], studio_id, date.isoformat())
+        new_movie = graphql_movieCreate(file_data["movie"], studio_id, date)
         movie_id = new_movie["id"]
         log.LogDebug("Created missing movie '{}' with id {}".format(
             file_data["movie"], new_movie["id"]))
@@ -371,27 +360,22 @@ def lookup_create_movie(file_data, studio_id, date):
 
 
 def callGraphQL(query, variables=None):
-    # # Session cookie for authentication
-    # graphql_port = str(FRAGMENT_SERVER["Port"])
-    # graphql_scheme = FRAGMENT_SERVER["Scheme"]
-    # graphql_cookies = {"session": FRAGMENT_SERVER["SessionCookie"]["Value"]}
-    # graphql_headers = {
-    #     "Accept-Encoding": "gzip, deflate, br",
-    #     "Content-Type": "application/json",
-    #     "Accept": "application/json",
-    #     "Connection": "keep-alive",
-    #     "DNT": "1"
-    # }
-    # graphql_domain = FRAGMENT_SERVER["Host"]
-    # if graphql_domain == "0.0.0.0":
-    #     graphql_domain = "localhost"
-    # # Stash GraphQL endpoint
-    # graphql_url = f"{graphql_scheme}://{graphql_domain}:{graphql_port}/graphql"
-    # ! BEGIN TEST DATA
-    graphql_url = f"http://10.1.1.113:9990/graphql?apikey=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1aWQiOiJyb290IiwiaWF0IjoxNjYzOTQyNjMyLCJzdWIiOiJBUElLZXkifQ.KFIBIks8N8LxeJLrZlmumOwn52jqXzzjPVdrCv7Rb7A&"
-    graphql_headers = ""
-    graphql_cookies = ""
-    # ! END TEST DATA
+    # Session cookie for authentication
+    graphql_port = str(FRAGMENT_SERVER["Port"])
+    graphql_scheme = FRAGMENT_SERVER["Scheme"]
+    graphql_cookies = {"session": FRAGMENT_SERVER["SessionCookie"]["Value"]}
+    graphql_headers = {
+        "Accept-Encoding": "gzip, deflate, br",
+        "Content-Type": "application/json",
+        "Accept": "application/json",
+        "Connection": "keep-alive",
+        "DNT": "1"
+    }
+    graphql_domain = FRAGMENT_SERVER["Host"]
+    if graphql_domain == "0.0.0.0":
+        graphql_domain = "localhost"
+    # Stash GraphQL endpoint
+    graphql_url = f"{graphql_scheme}://{graphql_domain}:{graphql_port}/graphql"
 
     json = {"query": query}
     if variables is not None:
@@ -419,7 +403,6 @@ def callGraphQL(query, variables=None):
 
 
 def graphql_getScene(scene_id):
-    # TODO: check if path is not enough...
     query = """
     query FindScene($id: ID!, $checksum: String) {
         findScene(id: $id, checksum: $checksum) {
@@ -428,34 +411,8 @@ def graphql_getScene(scene_id):
     }
     fragment SceneData on Scene {
         id
-        title
-        date
-        rating
         organized
         path
-        studio {
-            id
-            name
-            parent_studio {
-                id
-                name
-            }
-        }
-        tags {
-            id
-            name
-        }
-        performers {
-            id
-            name
-        }
-        movies {
-            movie {
-                name
-                date
-            }
-            scene_index
-        }
     }
     """
     variables = {
@@ -465,7 +422,7 @@ def graphql_getScene(scene_id):
     return result.get("findScene")
 
 
-def graphql_updateScene(data):
+def graphql_updateScene(scene_id, scene_data):
     query = """
     mutation sceneUpdate($input: SceneUpdateInput!) {
         sceneUpdate(input: $input) {
@@ -475,9 +432,17 @@ def graphql_updateScene(data):
     """
     variables = {
         "input": {
-            "id": data["id"],
-            "performer_ids": data["performer_ids"]
-            # TODO: map all scene data
+            "id": scene_id,
+            "title": scene_data["title"],
+            "details": scene_data["details"],
+            "date": scene_data["date"],
+            "rating": scene_data["rating"],
+            "studio_id": scene_data["studio_id"],
+            "performer_ids": scene_data["performer_ids"],
+            "tag_ids": scene_data["tag_ids"],
+            "movies" : {
+                "movie_id": scene_data["movie_id"],
+            }
         }
     }
     result = callGraphQL(query, variables)
@@ -684,15 +649,11 @@ def exit_plugin(msg=None, err=None):
 
 DRY_MODE = config.dry_mode
 START_TIME = time.time()
-# FRAGMENT = json.loads(sys.stdin.read())
-# FRAGMENT_SERVER = FRAGMENT["server_connection"]
-# # PLUGIN_DIR = FRAGMENT_SERVER["PluginDir"]
-# FRAGMENT_HOOK_TYPE = FRAGMENT["args"]["hookContext"]["type"]
-# FRAGMENT_SCENE_ID = FRAGMENT["args"]["hookContext"]["id"]
-# ! BEGIN TEST DATA
-FRAGMENT_SCENE_ID = 3230
-FRAGMENT_HOOK_TYPE = "Scene.Create.Post"
-# ! END TEST DATA
+FRAGMENT = json.loads(sys.stdin.read())
+FRAGMENT_SERVER = FRAGMENT["server_connection"]
+# PLUGIN_DIR = FRAGMENT_SERVER["PluginDir"]
+FRAGMENT_HOOK_TYPE = FRAGMENT["args"]["hookContext"]["type"]
+FRAGMENT_SCENE_ID = FRAGMENT["args"]["hookContext"]["id"]
 
 if FRAGMENT_HOOK_TYPE != "Scene.Create.Post":
     exit_plugin(
