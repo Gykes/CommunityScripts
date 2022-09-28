@@ -25,11 +25,22 @@ def parse(scene_id):
         log.LogDebug(
             "Skipping already organized scene id: {}".format(stash_scene["id"]))
         return
+    # ! BEGIN TEST DATA
+    stash_scene["path"] = stash_scene["path"].replace(
+        "/data/", "/Users/vince/mnt/rawpriv/Moviez/_STASH-TEST/")
+    # ! END TEST DATA
     file_data = nfoParser.parse(stash_scene["path"])
     if file_data is None:
-        file_data = reParser.parse(stash_scene["path"])
+        re_parser = reParser.RegExParser(stash_scene["path"])
+        file_data = re_parser.parse()
+        if file_data is None:
+            log.LogDebug("No matching NFO or RE found: nothing done...")
+            return
     # Update scene data from parsed info (and retrieve/create performers, studios, movies,...)
     scene_data = create_lookup_scene_data(file_data)
+    if config.dry_mode:
+        log.LogInfo("Dry mode. Would have updated scene based on: {}".format(json.dumps(scene_data)))
+        return
     updated_scene = graphql_updateScene(scene_id, scene_data)
     if updated_scene != None and updated_scene["id"] == scene_id:
         log.LogInfo("Successfully updated scene {} (id: {}) using file '{}'".format(
@@ -45,7 +56,7 @@ def create_lookup_scene_data(file_data):
     tag_ids = lookup_create_tags(file_data)
     movie_id = lookup_create_movie(file_data, studio_id, file_data["date"])
     scene_data = {
-        "source": scene_data["source"],
+        "source": file_data["source"],
         "title": file_data["title"],
         "details": file_data["details"],
         "date": file_data["date"],
@@ -491,7 +502,6 @@ def exit_plugin(msg=None, err=None):
     sys.exit()
 
 
-DRY_MODE = config.dry_mode
 START_TIME = time.time()
 # FRAGMENT = json.loads(sys.stdin.read())
 # FRAGMENT_SERVER = FRAGMENT["server_connection"]

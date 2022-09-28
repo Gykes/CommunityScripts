@@ -10,40 +10,20 @@ import log
 def find_nfo_file(scene_path):
     file_path = os.path.splitext(scene_path)[0]
     nfo_path = "{}.nfo".format(file_path)
-    # ! BEGIN TEST DATA
-    nfo_path = nfo_path.replace(
-        "/data/", "/Users/vince/mnt/rawpriv/Moviez/_STASH-TEST/")
-    # ! END TEST DATA
     return nfo_path
 
 
 def parse_nfo_title(nfo_root):
-    title = nfo_root.find("title")
-    originaltitle = nfo_root.find("originaltitle")
-    sorttitle = nfo_root.find("sorttitle")
     file_title = None
     if "title" not in config.blacklist:
-        if title is not None:
-            file_title = title.text
-        elif originaltitle is not None:
-            file_title = originaltitle.text
-        elif sorttitle is not None:
-            file_title = sorttitle.text
+        file_title = nfo_root.findtext("title") or nfo_root.findtext("originaltitle") or nfo_root.findtext("sorttitle")
     return file_title
 
 
 def parse_nfo_details(nfo_root):
-    plot = nfo_root.find("plot")
-    outline = nfo_root.find("outline")
-    tagline = nfo_root.find("tagline")
     file_details = None
     if "details" not in config.blacklist:
-        if plot is not None:
-            file_details = plot.text
-        elif outline is not None:
-            file_details = outline.text
-        elif tagline is not None:
-            file_details = tagline.text
+        file_details = nfo_root.findtext("plot") or nfo_root.findtext("outline") or nfo_root.findtext("tagline")
     return file_details
 
 
@@ -54,13 +34,12 @@ def parse_nfo_rating(nfo_root):
         try:
             user_rating = nfo_root.find("userrating")
             if user_rating is not None:
-                value = round(float(user_rating.text))
-                file_rating = value
+                file_rating = round(float(user_rating.text))
             else:
                 rating = nfo_root.find("ratings/rating")
                 if rating is not None:
                     max = float(rating.attrib["max"])
-                    value = float(rating.find("value").text)
+                    value = float(rating.findtext("value"))
                     file_rating = round(value / (max / 5))
         except Exception as e:
             log.LogDebug("Error parsing rating: {}".format(e))
