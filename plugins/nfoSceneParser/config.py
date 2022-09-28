@@ -5,20 +5,15 @@ nfo_path = "with files"
 # if you set the above to "with files", it'll force filename anyway, to match the filename.
 filename = "stashid"
 
-# Looks for existing studios also in aliases
+# Creates missing entities in stash's database (or not)
+create_missing_performers = True
 create_missing_studio = True
-
-# Looks for existing studios also in aliases
-create_missing_performer = True
-
-# Looks for existing studios also in aliases
+create_missing_tags = True
 create_missing_movie = True
 
-# Looks for existing studios also in aliases
-search_studio_aliases = True
-
-# Looks for existing performers also in aliases
+# Wether to Looks for existing entries also in aliases
 search_performer_aliases = True
+search_studio_aliases = True
 
 # "Single names" means performers with only one word as name like "Anna" or "Siri".
 # If true, single names aliases will be ignored => only the "main" performer name will determine 
@@ -30,17 +25,20 @@ ignore_single_name_performer_aliases = True
 # Otherwise, it will not change existing data, only add the missing fields. 
 # Typically, newly created scenes are empty, but other plug-ins may have set some data already...
 # Adapt according to your trust in your NFO data quality ;-)
-override_values = True
+# override_values = True (not yet implemented)
 
 # If True, will do nothing for already "organized" scenes. 
 skip_organized = True
+
+# If True, will set the scene to "organized" on update from nfo file. 
+set_organized_nfo = True
 
 # If dry is True, will do a trial run with no permanent changes. 
 dry_mode = False
 
 # Blacklist: array of nfo fields that will not be loaded into the scene.
-# Possible values are the usual scene field names: title, detail, studio, performers, tags, movie,...
-# Example: blacklist = ["Tags", "Image"]
+# Possible values are the usual scene field names (in lowercase): title, details, studio, performers, tags, movie,...
+# Example: blacklist = ["tags", "thumbnails"]
 blacklist = []
 
 ###############################################################################

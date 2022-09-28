@@ -1,68 +1,16 @@
 import json
-import os
 import re
 import sys
 import time
-import xml.etree.ElementTree as xml
-from datetime import date
+from turtle import title
+# from datetime import date
 import config
 import log
-
-'''
-Type definitions for supported NFO file data - For information
-
-class Actors(TypedDict, total=False):
-    name: str
-    order: int
-    role: str
-    thumb: str
-
-class MovieSet(TypedDict, total=False):
-    name: str
-    overview: int
-
-class Thumb(TypedDict, total=False):
-    _aspect: str
-    _preview: str
-    text: str
-
-class Rating(TypedDict, total=False):
-    _name: str
-    _max: str
-    _default: str
-    value: str
-
-class FileData(TypedDict, total=False):
-    actor: Actors
-    country: str
-    credits: str
-    dateadded: str
-    director: str
-    genre: str
-    id: str
-    lastplayed: str
-    mpaa: str
-    originaltitle: str
-    outline: str
-    playcount: int
-    plot: str
-    premiered: str
-    sorttitle: str
-    set: MovieSet
-    studio: str
-    tag: str
-    tagline: str
-    thumb: Thumb
-    title: str
-    trailer: str
-    uniqueid: str
-    userrating: int
-    ratings: Rating
-    year: int
-'''
-
-# TODO: regex parsing,...
-# TODO: Plan for potential substitutions (replace single name actors)
+import nfoParser
+import reParser
+# ! BEGIN TEST DATA
+import requests
+# ! END TEST DATA
 
 
 def parse(scene_id):
@@ -77,145 +25,27 @@ def parse(scene_id):
         log.LogDebug(
             "Skipping already organized scene id: {}".format(stash_scene["id"]))
         return
-    file_data = parse_nfo(stash_scene["path"])
+    file_data = nfoParser.parse(stash_scene["path"])
     if file_data is None:
-        file_data = parse_re(stash_scene["path"])
-    # Retrieve the existing id or create a new entry for satellite data (performers, studios, movies,...)
-    scene_data = lookup_create_IDs(file_data)
-    graphql_updateScene(scene_id, scene_data)
+        file_data = reParser.parse(stash_scene["path"])
+    # Update scene data from parsed info (and retrieve/create performers, studios, movies,...)
+    scene_data = create_lookup_scene_data(file_data)
+    updated_scene = graphql_updateScene(scene_id, scene_data)
+    if updated_scene != None and updated_scene["id"] == scene_id:
+        log.LogInfo("Successfully updated scene {} (id: {}) using file '{}'".format(
+            scene_data[title], scene_id, file_data["file"]))
+    else:
+        log.LogInfo("Error updating scene id: {} from file. Enable debug log for details.".format(
+            scene_id))
 
 
-def find_nfo_file(scene_path):
-    file_path = os.path.splitext(scene_path)[0]
-    nfo_path = "{}.nfo".format(file_path)
-    return nfo_path
-
-
-def parse_nfo_title(nfo_root):
-    title = nfo_root.find("title")
-    originaltitle = nfo_root.find("originaltitle")
-    sorttitle = nfo_root.find("sorttitle")
-    file_title = None
-    if title is not None:
-        file_title = title.text
-    elif originaltitle is not None:
-        file_title = originaltitle.text
-    elif sorttitle is not None:
-        file_title = sorttitle.text
-    return file_title
-
-
-def parse_nfo_details(nfo_root):
-    plot = nfo_root.find("plot")
-    outline = nfo_root.find("outline")
-    tagline = nfo_root.find("tagline")
-    file_details = None
-    if plot is not None:
-        file_details = plot.text
-    elif outline is not None:
-        file_details = outline.text
-    elif tagline is not None:
-        file_details = tagline.text
-    return file_details
-
-
-def parse_nfo_rating(nfo_root):
-    # rating is converted to a scale of 5 if needed
-    file_rating = None
-    try:
-        user_rating = nfo_root.find("userrating")
-        if user_rating is not None:
-            value = float(user_rating.text)
-            file_rating = value
-        else:
-            rating = nfo_root.find("ratings/rating")
-            if rating is not None:
-                max = float(rating.attrib["max"])
-                value = float(rating.find("value").text)
-                file_rating = value / (max / 5)
-    except Exception as e:
-        log.LogDebug("Error parsing rating: {}".format(e))
-    return file_rating
-
-
-def parse_nfo_date(nfo_root):
-    # date either in full or only the year
-    file_date = None
-    try:
-        premiered = nfo_root.find("premiered")
-        year = nfo_root.find("year")
-        if premiered is not None:
-            file_date = premiered.text
-        elif year is not None:
-            file_date = date.fromisocalendar(int(year.text), 1, 1).isoformat()
-    except Exception as e:
-        log.LogDebug("Error parsing date: {}".format(e))
-    return file_date
-
-
-def parse_nfo(scene_path):
-    nfo_file = find_nfo_file(scene_path)
-    if not os.path.exists(nfo_file):
-        return
-    log.LogDebug("Parsing '{}'".format(nfo_file))
-    try:
-        nfo_root = xml.parse(nfo_file)
-    except Exception as e:
-        log.LogError("Could not parse nfo '{}'".format(nfo_file, e))
-        return
-    file_title = parse_nfo_title(nfo_root)
-    file_details = parse_nfo_details(nfo_root)
-    file_rating = parse_nfo_rating(nfo_root)
-    file_date = parse_nfo_date(nfo_root)
-    # studio
-    studio = nfo_root.find("studio")
-    file_studio = None
-    if studio is not None:
-        file_studio = studio.text
-    # movie
-    set = nfo_root.find("set/name")
-    file_movie = None
-    if set is not None:
-        file_movie = set.text
-    # actor names
-    file_actors = []
-    actors = nfo_root.findall("actor/name")
-    for actor in actors:
-        file_actors.append(actor.text)
-    # tags
-    file_tags = []
-    tags = nfo_root.findall("tag")
-    for tag in tags:
-        file_tags.append(tag.text)
-
-    file_data = {
-        "title": file_title,
-        "details": file_details,
-        "studio": file_studio,
-        "movie": file_movie,
-        "date": file_date,
-        "actors": file_actors,
-        "tags": file_tags,
-        "rating": file_rating
-    }
-    return file_data
-
-
-def parse_re(scene_path):
-    # TODO: parse pattern...
-    return
-
-
-def find_re_file(scene_path):
-    return
-
-
-def lookup_create_IDs(file_data):
+def create_lookup_scene_data(file_data):
     performer_ids = lookup_create_performers(file_data)
     studio_id = lookup_create_studio(file_data)
     tag_ids = lookup_create_tags(file_data)
     movie_id = lookup_create_movie(file_data, studio_id, file_data["date"])
     scene_data = {
+        "source": scene_data["source"],
         "title": file_data["title"],
         "details": file_data["details"],
         "date": file_data["date"],
@@ -259,7 +89,7 @@ def lookup_create_performers(file_data):
                                 match_alias = True
                             match_count += 1
         # Create a new performer when it does not exist
-        if matching_id is None:
+        if matching_id is None and config.create_missing_performers:
             new_performer = graphql_performerCreate(actor)
             performer_ids.append(new_performer["id"])
             log.LogDebug("Created missing performer '{}' with id {}".format(
@@ -301,7 +131,7 @@ def lookup_create_studio(file_data):
                             match_alias = True
                         match_count += 1
     # Create a new studio when it does not exist
-    if matching_id is None:
+    if matching_id is None and config.create_missing_studio:
         new_studio = graphql_studioCreate(file_data["studio"])
         studio_id = new_studio["id"]
         log.LogDebug("Created missing studio '{}' with id {}".format(
@@ -327,7 +157,7 @@ def lookup_create_tags(file_data):
                 if matching_id is None:
                     matching_id = tag["id"]
         # Create a new tag when it does not exist
-        if matching_id is None:
+        if matching_id is None and config.create_missing_tags:
             new_tag = graphql_tagCreate(file_tag)
             tag_ids.append(new_tag["id"])
             log.LogDebug("Created missing tag '{}' with id {}".format(
@@ -351,7 +181,7 @@ def lookup_create_movie(file_data, studio_id, date):
             if matching_id is None:
                 matching_id = movie["id"]
     # Create a new movie when it does not exist
-    if matching_id is None:
+    if matching_id is None and config.create_missing_movie:
         new_movie = graphql_movieCreate(file_data["movie"], studio_id, date)
         movie_id = new_movie["id"]
         log.LogDebug("Created missing movie '{}' with id {}".format(
@@ -364,22 +194,27 @@ def lookup_create_movie(file_data, studio_id, date):
 
 
 def callGraphQL(query, variables=None):
-    # Session cookie for authentication
-    graphql_port = str(FRAGMENT_SERVER["Port"])
-    graphql_scheme = FRAGMENT_SERVER["Scheme"]
-    graphql_cookies = {"session": FRAGMENT_SERVER["SessionCookie"]["Value"]}
-    graphql_headers = {
-        "Accept-Encoding": "gzip, deflate, br",
-        "Content-Type": "application/json",
-        "Accept": "application/json",
-        "Connection": "keep-alive",
-        "DNT": "1"
-    }
-    graphql_domain = FRAGMENT_SERVER["Host"]
-    if graphql_domain == "0.0.0.0":
-        graphql_domain = "localhost"
-    # Stash GraphQL endpoint
-    graphql_url = f"{graphql_scheme}://{graphql_domain}:{graphql_port}/graphql"
+    # # Session cookie for authentication
+    # graphql_port = str(FRAGMENT_SERVER["Port"])
+    # graphql_scheme = FRAGMENT_SERVER["Scheme"]
+    # graphql_cookies = {"session": FRAGMENT_SERVER["SessionCookie"]["Value"]}
+    # graphql_headers = {
+    #     "Accept-Encoding": "gzip, deflate, br",
+    #     "Content-Type": "application/json",
+    #     "Accept": "application/json",
+    #     "Connection": "keep-alive",
+    #     "DNT": "1"
+    # }
+    # graphql_domain = FRAGMENT_SERVER["Host"]
+    # if graphql_domain == "0.0.0.0":
+    #     graphql_domain = "localhost"
+    # # Stash GraphQL endpoint
+    # graphql_url = f"{graphql_scheme}://{graphql_domain}:{graphql_port}/graphql"
+    # ! BEGIN TEST DATA
+    graphql_url = f"http://10.1.1.113:9990/graphql?apikey=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1aWQiOiJyb290IiwiaWF0IjoxNjYzOTQyNjMyLCJzdWIiOiJBUElLZXkifQ.KFIBIks8N8LxeJLrZlmumOwn52jqXzzjPVdrCv7Rb7A&"
+    graphql_headers = ""
+    graphql_cookies = ""
+    # ! END TEST DATA
 
     json = {"query": query}
     if variables is not None:
@@ -427,6 +262,7 @@ def graphql_getScene(scene_id):
 
 
 def graphql_updateScene(scene_id, scene_data):
+    # TODO: support config.override_values
     query = """
     mutation sceneUpdate($input: SceneUpdateInput!) {
         sceneUpdate(input: $input) {
@@ -444,10 +280,12 @@ def graphql_updateScene(scene_id, scene_data):
         "performer_ids": scene_data["performer_ids"],
         "tag_ids": scene_data["tag_ids"],
     }
+    if config.set_organized_nfo and scene_data["source"] == "nfo":
+        input["organized"]: True
     if scene_data["movie_id"] is not None:
         input["movies"] = {
-                "movie_id": scene_data["movie_id"],
-            }
+            "movie_id": scene_data["movie_id"],
+        }
     variables = {
         "input": input
     }
@@ -655,11 +493,15 @@ def exit_plugin(msg=None, err=None):
 
 DRY_MODE = config.dry_mode
 START_TIME = time.time()
-FRAGMENT = json.loads(sys.stdin.read())
-FRAGMENT_SERVER = FRAGMENT["server_connection"]
-# PLUGIN_DIR = FRAGMENT_SERVER["PluginDir"]
-FRAGMENT_HOOK_TYPE = FRAGMENT["args"]["hookContext"]["type"]
-FRAGMENT_SCENE_ID = FRAGMENT["args"]["hookContext"]["id"]
+# FRAGMENT = json.loads(sys.stdin.read())
+# FRAGMENT_SERVER = FRAGMENT["server_connection"]
+# # PLUGIN_DIR = FRAGMENT_SERVER["PluginDir"]
+# FRAGMENT_HOOK_TYPE = FRAGMENT["args"]["hookContext"]["type"]
+# FRAGMENT_SCENE_ID = FRAGMENT["args"]["hookContext"]["id"]
+# ! BEGIN TEST DATA
+FRAGMENT_SCENE_ID = 3230
+FRAGMENT_HOOK_TYPE = "Scene.Create.Post"
+# ! END TEST DATA
 
 if FRAGMENT_HOOK_TYPE != "Scene.Create.Post":
     exit_plugin(
