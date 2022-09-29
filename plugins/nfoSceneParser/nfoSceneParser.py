@@ -1,16 +1,10 @@
 import json
-import re
 import sys
 import time
-from turtle import title
-# from datetime import date
 import config
 import log
 import nfoParser
 import reParser
-# ! BEGIN TEST DATA
-import requests
-# ! END TEST DATA
 
 
 def parse(scene_id):
@@ -25,26 +19,25 @@ def parse(scene_id):
         log.LogDebug(
             "Skipping already organized scene id: {}".format(stash_scene["id"]))
         return
-    # ! BEGIN TEST DATA
-    stash_scene["path"] = stash_scene["path"].replace(
-        "/data/", "/Users/vince/mnt/rawpriv/Moviez/_STASH-TEST/")
-    # ! END TEST DATA
-    file_data = nfoParser.parse(stash_scene["path"])
+    nfo_parser = nfoParser.NfoParser(stash_scene["path"])
+    file_data = nfo_parser.parse_scene()
     if file_data is None:
         re_parser = reParser.RegExParser(stash_scene["path"])
-        file_data = re_parser.parse()
+        file_data = re_parser.parse_scene()
         if file_data is None:
             log.LogDebug("No matching NFO or RE found: nothing done...")
             return
     # Update scene data from parsed info (and retrieve/create performers, studios, movies,...)
     scene_data = create_lookup_scene_data(file_data)
+    # Possible improvement: enrich nfo scene index from regex matched index?
     if config.dry_mode:
-        log.LogInfo("Dry mode. Would have updated scene based on: {}".format(json.dumps(scene_data)))
+        log.LogInfo("Dry mode. Would have updated scene based on: {}".format(
+            json.dumps(scene_data)))
         return
     updated_scene = graphql_updateScene(scene_id, scene_data)
-    if updated_scene != None and updated_scene["id"] == scene_id:
-        log.LogInfo("Successfully updated scene {} (id: {}) using file '{}'".format(
-            scene_data[title], scene_id, file_data["file"]))
+    if updated_scene != None and updated_scene["id"] == str(scene_id):
+        log.LogInfo("Successfully updated scene id: {} using file '{}'".format(
+            scene_id, file_data["file"]))
     else:
         log.LogInfo("Error updating scene id: {} from file. Enable debug log for details.".format(
             scene_id))
@@ -65,12 +58,14 @@ def create_lookup_scene_data(file_data):
         "performer_ids": performer_ids,
         "tag_ids": tag_ids,
         "movie_id": movie_id,
+        "scene_index": file_data["scene_index"],
+        "cover_image": file_data["cover_image"],
     }
     return scene_data
 
 
 def is_matching(text1, text2):
-    # TODO: levenshtein distance instead of exact match?
+    # Possible improvement: levenshtein distance instead of exact match?
     return text1 == text2
 
 
@@ -205,27 +200,22 @@ def lookup_create_movie(file_data, studio_id, date):
 
 
 def callGraphQL(query, variables=None):
-    # # Session cookie for authentication
-    # graphql_port = str(FRAGMENT_SERVER["Port"])
-    # graphql_scheme = FRAGMENT_SERVER["Scheme"]
-    # graphql_cookies = {"session": FRAGMENT_SERVER["SessionCookie"]["Value"]}
-    # graphql_headers = {
-    #     "Accept-Encoding": "gzip, deflate, br",
-    #     "Content-Type": "application/json",
-    #     "Accept": "application/json",
-    #     "Connection": "keep-alive",
-    #     "DNT": "1"
-    # }
-    # graphql_domain = FRAGMENT_SERVER["Host"]
-    # if graphql_domain == "0.0.0.0":
-    #     graphql_domain = "localhost"
-    # # Stash GraphQL endpoint
-    # graphql_url = f"{graphql_scheme}://{graphql_domain}:{graphql_port}/graphql"
-    # ! BEGIN TEST DATA
-    graphql_url = f"http://10.1.1.113:9990/graphql?apikey=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1aWQiOiJyb290IiwiaWF0IjoxNjYzOTQyNjMyLCJzdWIiOiJBUElLZXkifQ.KFIBIks8N8LxeJLrZlmumOwn52jqXzzjPVdrCv7Rb7A&"
-    graphql_headers = ""
-    graphql_cookies = ""
-    # ! END TEST DATA
+    # Session cookie for authentication
+    graphql_port = str(FRAGMENT_SERVER["Port"])
+    graphql_scheme = FRAGMENT_SERVER["Scheme"]
+    graphql_cookies = {"session": FRAGMENT_SERVER["SessionCookie"]["Value"]}
+    graphql_headers = {
+        "Accept-Encoding": "gzip, deflate, br",
+        "Content-Type": "application/json",
+        "Accept": "application/json",
+        "Connection": "keep-alive",
+        "DNT": "1"
+    }
+    graphql_domain = FRAGMENT_SERVER["Host"]
+    if graphql_domain == "0.0.0.0":
+        graphql_domain = "localhost"
+    # Stash GraphQL endpoint
+    graphql_url = f"{graphql_scheme}://{graphql_domain}:{graphql_port}/graphql"
 
     json = {"query": query}
     if variables is not None:
@@ -273,7 +263,6 @@ def graphql_getScene(scene_id):
 
 
 def graphql_updateScene(scene_id, scene_data):
-    # TODO: support config.override_values
     query = """
     mutation sceneUpdate($input: SceneUpdateInput!) {
         sceneUpdate(input: $input) {
@@ -291,11 +280,14 @@ def graphql_updateScene(scene_id, scene_data):
         "performer_ids": scene_data["performer_ids"],
         "tag_ids": scene_data["tag_ids"],
     }
+    if scene_data["cover_image"] is not None:
+        input.update({"cover_image": scene_data["cover_image"]})
     if config.set_organized_nfo and scene_data["source"] == "nfo":
-        input["organized"]: True
+        input.update({"organized": True})
     if scene_data["movie_id"] is not None:
         input["movies"] = {
             "movie_id": scene_data["movie_id"],
+            "scene_index": scene_data["scene_index"],
         }
     variables = {
         "input": input
@@ -503,15 +495,11 @@ def exit_plugin(msg=None, err=None):
 
 
 START_TIME = time.time()
-# FRAGMENT = json.loads(sys.stdin.read())
-# FRAGMENT_SERVER = FRAGMENT["server_connection"]
-# # PLUGIN_DIR = FRAGMENT_SERVER["PluginDir"]
-# FRAGMENT_HOOK_TYPE = FRAGMENT["args"]["hookContext"]["type"]
-# FRAGMENT_SCENE_ID = FRAGMENT["args"]["hookContext"]["id"]
-# ! BEGIN TEST DATA
-FRAGMENT_SCENE_ID = 3230
-FRAGMENT_HOOK_TYPE = "Scene.Create.Post"
-# ! END TEST DATA
+FRAGMENT = json.loads(sys.stdin.read())
+FRAGMENT_SERVER = FRAGMENT["server_connection"]
+# PLUGIN_DIR = FRAGMENT_SERVER["PluginDir"]
+FRAGMENT_HOOK_TYPE = FRAGMENT["args"]["hookContext"]["type"]
+FRAGMENT_SCENE_ID = FRAGMENT["args"]["hookContext"]["id"]
 
 if FRAGMENT_HOOK_TYPE != "Scene.Create.Post":
     exit_plugin(

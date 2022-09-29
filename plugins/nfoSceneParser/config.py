@@ -21,17 +21,11 @@ search_studio_aliases = True
 # Only relevant if search_performer_aliases is True.
 ignore_single_name_performer_aliases = True
 
-# If True, will override existing data from the nfo or pattern.
-# Otherwise, it will not change existing data, only add the missing fields. 
-# Typically, newly created scenes are empty, but other plug-ins may have set some data already...
-# Adapt according to your trust in your NFO data quality ;-)
-# override_values = True (not yet implemented)
-
 # If True, will do nothing for already "organized" scenes. 
 skip_organized = True
 
 # If True, will set the scene to "organized" on update from nfo file. 
-set_organized_nfo = True
+set_organized_nfo = False
 
 # If dry is True, will do a trial run with no permanent changes. 
 dry_mode = False
