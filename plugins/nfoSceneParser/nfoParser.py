@@ -13,11 +13,12 @@ class NfoParser:
     # Searched in the list order. First found is the one used.
     _image_formats = ["jpg", "jpeg", "png"]
     _image_suffixes = ["-landscape", "-thumb", "-cover", "-poster", ""]
+    # Max number if images to process (2 for front/back cover in movies).
+    _image_Max = 2
 
     def __init__(self, scene_path, folder_mode=False):
         # Finds nfo file
         nfo_path = None
-        # TODO: check lower on config for all options
         if config.nfo_location.lower() == "with files":
             if folder_mode:
                 dir_path = os.path.dirname(scene_path)
@@ -34,11 +35,15 @@ class NfoParser:
         file_no_ext = os.path.split(path_no_ext)[1]
         files = sorted(glob.glob(f"{path_no_ext}*.*"))
         file_pattern = re.compile("^.*" + re.escape(file_no_ext) + "(-landscape\\d{0,2}|-thumb\\d{0,2}|-poster\\d{0,2}|-cover\\d{0,2}|\\d{0,2})\\.(jpe?g|png)$", re.I)
+        index = 0
         for file in files:
+            if index >= self._image_Max:
+                break
             if file_pattern.match(file):
                 with open(file, "rb") as img:
                     img_bytes = img.read()
                 thumb_images.append(img_bytes)
+                index += 1
         return thumb_images
 
     def ___extract_thumb_urls(self, filter):
@@ -52,8 +57,10 @@ class NfoParser:
         # Prefer "landscape" images, then "poster", otherwise take any thumbnail image...
         thumb_urls = self.___extract_thumb_urls("thumb[@aspect='landscape']") or self.___extract_thumb_urls(
             "thumb[@aspect='poster']") or self.___extract_thumb_urls("thumb")
+        # Ensure there are images and the count does not exceed the max allowed...
         if len(thumb_urls) == 0:
             return
+        del thumb_urls[self._image_Max:]
         # Download images from url
         thumb_images = []
         for thumb_url in thumb_urls:
@@ -133,7 +140,7 @@ class NfoParser:
         # Extract data from XML tree. Spec: https://kodi.wiki/view/NFO_files/Movies
         b64_images = self.__extract_cover_images_b64()
         file_data = {
-            # TODO: add uniqueid
+            # TODO: supports stash uniqueid to match to existing scenes (compatibility with nfo exporter)
             "file": self._nfo_file,
             "source": "nfo",
             "title": self._nfo_root.findtext("title") or self._nfo_root.findtext("originaltitle") or self._nfo_root.findtext("sorttitle"),

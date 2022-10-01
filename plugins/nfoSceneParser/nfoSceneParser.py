@@ -167,10 +167,15 @@ def lookup_create_studio(file_data):
 
 def lookup_create_tags(file_data):
     tag_ids = []
+    blacklisted_tags = [tag.lower() for tag in config.blacklisted_tags]
     for file_tag in file_data["tags"]:
+        # skip blacklisted tags
+        if file_tag.lower() in blacklisted_tags:
+            continue
+        # find stash tags
         tags = stash.findTags(file_tag)
         matching_id = None
-        # Ensure direct name matche
+        # Ensure direct name match
         for tag in tags["tags"]:
             if is_matching(file_tag, tag["name"]):
                 if matching_id is None:
