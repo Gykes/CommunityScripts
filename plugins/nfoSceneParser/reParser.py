@@ -30,17 +30,19 @@ class RegExParser:
             return self.__find_re_config(parent_dir)
         log.LogDebug("No re config found for {}".format(self._scene_path))
 
-    def parse_scene(self):
+    def parse(self, defaults = {}):
         if self._re_config_file is None:
             return
+        if defaults is None:
+            defaults = {}
         match = re.match(self._regex, self._scene_path).groupdict()
-        file_actors = None
+        file_actors = []
         if match.get("performers"):
             if self._performers_splitter is not None:
                 file_actors = match.get("performers").split(self._performers_splitter)
             else:
                 file_actors = [match.get("performers")]
-        file_tags = None
+        file_tags = []
         if match.get("tags"):
             if self._performers_splitter is not None:
                 file_actors = match.get("tags").split(self._tags_splitter)
@@ -50,14 +52,18 @@ class RegExParser:
             "file": self._re_config_file,
             "source": "re",
             "title": match.get("title"),
-            "details": None,
-            "studio": match.get("studio"),
-            "movie": match.get("movie"),
-            "scene_index": match.get("index"),
-            "date": match.get("date"),
-            "actors": file_actors,
-            "tags": file_tags,
-            "rating": match.get("rating"),
+            "director": match.get("director") or defaults.get("director"),
+            "details": defaults.get("details"),
+            "studio": match.get("studio") or defaults.get("studio"),
+            "movie": match.get("movie") or defaults.get("title"),
+            "scene_index": match.get("index") or defaults.get("scene_index"),
+            "date": match.get("date") or defaults.get("date"),
+            "actors": file_actors or defaults.get("tags"),
+            # tags are merged with defaults
+            "tags": list(set(file_tags + (defaults.get("tags") or []))), 
+            "rating": match.get("rating") or defaults.get("rating"),
             "cover_image": None,
+            "other_image": None,
+            "url": None,
         }
         return file_data

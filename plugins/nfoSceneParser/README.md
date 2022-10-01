@@ -18,7 +18,7 @@ Note: nfoFileParser works without manual config. If you want more control, have 
 
 Imports scene details from nfo files or from regex patterns.
 
-Complies with KODI's 'Movie Template' specification (https://kodi.wiki/view/NFO_files/Templates). Note: although initially created by KODI, this NFO structure has become a de-facto standard among video management software and is used today far beyond its KODI roots to store the video files's metadata.
+Complies with KODI's 'Movie Template' specification (https://kodi.wiki/view/NFO_files/Movies). Note: although initially created by KODI, this NFO structure has become a de-facto standard among video management software and is used today far beyond its KODI roots to store the video files's metadata.
 
 Every time a new scene is created (mainly you run a "scan" that finds missing scenes), it will:
   - look for a matching NFO file and parse it into the scene data (studio, performers, date, name,...)
