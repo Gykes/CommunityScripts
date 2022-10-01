@@ -14,7 +14,7 @@ nfo_location = "with files"
 skip_organized = True
 
 # If True, will set the scene to "organized" on update from nfo file. 
-set_organized_nfo = False
+set_organized_nfo = True
 
 # Set of fields that must be set from the nfo (i.e. "not be empty") for the scene to be marked organized. 
 # Possible values: "performers", "studio", "tags", "movie", "title", "details", "date", 
