@@ -48,7 +48,7 @@ class NfoParser:
                 index += 1
         return thumb_images
 
-    def ___extract_thumb_urls(self, query):
+    def ___find_thumb_urls(self, query):
         result = []
         matches = self._nfo_root.findall(query)
         for match in matches:
@@ -57,8 +57,9 @@ class NfoParser:
 
     def __download_cover_images(self):
         # Prefer "landscape" images, then "poster", otherwise take any thumbnail image...
-        thumb_urls = self.___extract_thumb_urls("thumb[@aspect='landscape']") or self.___extract_thumb_urls(
-            "thumb[@aspect='poster']") or self.___extract_thumb_urls("thumb")
+        thumb_urls = self.___find_thumb_urls("thumb[@aspect='landscape']") \
+            or self.___find_thumb_urls("thumb[@aspect='poster']") \
+            or self.___find_thumb_urls("thumb")
         # Ensure there are images and the count does not exceed the max allowed...
         if len(thumb_urls) == 0:
             return []
@@ -103,7 +104,7 @@ class NfoParser:
         # date either in <premiered> (full) or <year> (only the year)
         year = self._nfo_root.findtext("year")
         if year is not None:
-            year = "{}-01-01".format(year.text)
+            year = f"{year}-01-01"
         return self._nfo_root.findtext("premiered") or year
 
     def __extract_nfo_tags(self):
