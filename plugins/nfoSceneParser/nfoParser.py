@@ -61,7 +61,7 @@ class NfoParser:
             "thumb[@aspect='poster']") or self.___extract_thumb_urls("thumb")
         # Ensure there are images and the count does not exceed the max allowed...
         if len(thumb_urls) == 0:
-            return
+            return []
         del thumb_urls[self._image_Max:]
         # Download images from url
         thumb_images = []
