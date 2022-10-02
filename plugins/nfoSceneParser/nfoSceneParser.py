@@ -85,6 +85,8 @@ class NfoSceneParser:
 
     def __is_matching(self, text1, text2):
         # [ ] Possible improvement: levenshtein distance instead of exact match?
+        text1 = text1.lower() if text1 else text1
+        text2 = text2.lower() if text2 else text2
         return text1 == text2
 
     def __find_create_performers(self):
