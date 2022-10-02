@@ -17,7 +17,7 @@ class StashInterface:
         self._scene_id = self._fragment["args"]["hookContext"]["id"]
         self._path_rewrite = self._fragment["args"].get("pathRewrite")
         log.LogDebug(
-            f"Starting 'hook_nfoSceneParser' for scene {self._scene_id}")
+            f"Starting nfoSceneParser plugin for scene {self._scene_id}")
 
     def get_scene_id(self):
         return self._scene_id
@@ -41,7 +41,8 @@ class StashInterface:
         result = self.__callGraphQL(query, variables)
         # Path rewriting used for testing only
         if (self._path_rewrite is not None):
-            result["findScene"]["path"] = result["findScene"]["path"].replace(self._path_rewrite[0], self._path_rewrite[1])
+            result["findScene"]["path"] = result["findScene"]["path"].replace(
+                self._path_rewrite[0], self._path_rewrite[1])
         return result.get("findScene")
 
     def updateScene(self, scene_id, scene_data):
@@ -68,7 +69,8 @@ class StashInterface:
         # Update to "organized" according to config
         if config.set_organized_nfo and scene_data["source"] == "nfo":
             has_mandatory_tags = True
-            scene_keys = [item[0].replace("_id", "") if item[1] else None for item in scene_data.items()]
+            scene_keys = [item[0].replace(
+                "_id", "") if item[1] else None for item in scene_data.items()]
             for mandatory_tag in config.set_organized_only_if:
                 if mandatory_tag not in scene_keys:
                     has_mandatory_tags = False

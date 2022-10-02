@@ -1,14 +1,15 @@
 import os
 import xml.etree.ElementTree as xml
 import base64
-import requests
 import glob
 import re
+import requests
 import config
 import log
 
 
 class NfoParser:
+    ''' Parse nfo files '''
 
     # Searched in the list order. First found is the one used.
     _image_formats = ["jpg", "jpeg", "png"]
@@ -28,6 +29,7 @@ class NfoParser:
         # else:
             # TODO: supports dedicated dir instead of "with files" (compatibility with nfo exporter)
         self._nfo_file = nfo_path
+        self._nfo_root = None
 
     def __read_cover_image_file(self):
         thumb_images = []
@@ -124,6 +126,7 @@ class NfoParser:
         return file_actors
 
     def parse(self, defaults={}):
+        ''' Parses the nfo (with xml parser) '''
         if not os.path.exists(self._nfo_file):
             return
         if defaults is None:

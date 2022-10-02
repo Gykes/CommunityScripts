@@ -6,10 +6,13 @@ import log
 
 
 class RegExParser:
+    ''' Parse filenames (with regex) '''
 
     def __init__(self, scene_path):
         self._scene_path = scene_path
-        self._re_config_file = self.__find_re_config(os.path.dirname(scene_path))
+        self._re_config_file = self.__find_re_config(
+            os.path.dirname(scene_path))
+        self._groups = {}
 
     def __find_re_config(self, dir):
         parent_dir = os.path.dirname(dir)
@@ -22,9 +25,17 @@ class RegExParser:
                 self._regex = config["regex"]
                 self._splitter = config.get("splitter")
                 self._scope = config.get("scope")
+                # Scope defaults to the full path. Change to filename if so configured
+                if self._scope is not None and self._scope.lower() == "filename":
+                    self._name = os.path.split(self._scene_path)[1]
+                else:
+                    self._name = self._scene_path
+                log.LogDebug(
+                    "Using regex config file {}".format(re_config_file))
                 return re_config_file
             except Exception as e:
-                log.LogInfo("Could not load regex config file '{}': {}".format(re_config_file, e))
+                log.LogInfo("Could not load regex config file '{}': {}".format(
+                    re_config_file, e))
                 return
         elif dir != parent_dir:
             # Not found => look in parent
@@ -42,12 +53,18 @@ class RegExParser:
         # For proper boundary detection in regex, switch _ to -
         safe_text = text.replace("_", "-")
         # Finds dates in various formats
-        re_yyyymmdd = re.findall(r"(\b(?:19|20)\d\d)[- /.](\b1[012]|0[1-9])[- /.](\b3[01]|[12]\d|0[1-9])", safe_text)
-        re_ddmmyyyy = re.findall(r"(\b3[01]|[12]\d|0[1-9])[- /.](\b1[012]|0[1-9])[- /.](\b(?:19|20)\d\d)", safe_text)
-        re_yymmdd = re.findall(r"(\b\d\d)[- /.](\b1[012]|0[1-9])[- /.](\b3[01]|[12]\d|0[1-9])", safe_text)
-        re_ddmmyy = re.findall(r"(\b3[01]|[12]\d|0[1-9])[- /.](\b1[012]|0[1-9])[- /.](\b\d\d)", safe_text)
-        re_yyyymm = re.findall(r"\b((?:19|20)\d\d)[- /.](\b1[012]|0[1-9])", safe_text)
-        re_mmyyyy = re.findall(r"(\b1[012]|0[1-9])[- /.](\b(?:19|20)\d\d)", safe_text)
+        re_yyyymmdd = re.findall(
+            r"(\b(?:19|20)\d\d)[- /.](\b1[012]|0[1-9])[- /.](\b3[01]|[12]\d|0[1-9])", safe_text)
+        re_ddmmyyyy = re.findall(
+            r"(\b3[01]|[12]\d|0[1-9])[- /.](\b1[012]|0[1-9])[- /.](\b(?:19|20)\d\d)", safe_text)
+        re_yymmdd = re.findall(
+            r"(\b\d\d)[- /.](\b1[012]|0[1-9])[- /.](\b3[01]|[12]\d|0[1-9])", safe_text)
+        re_ddmmyy = re.findall(
+            r"(\b3[01]|[12]\d|0[1-9])[- /.](\b1[012]|0[1-9])[- /.](\b\d\d)", safe_text)
+        re_yyyymm = re.findall(
+            r"\b((?:19|20)\d\d)[- /.](\b1[012]|0[1-9])", safe_text)
+        re_mmyyyy = re.findall(
+            r"(\b1[012]|0[1-9])[- /.](\b(?:19|20)\d\d)", safe_text)
         re_yyyy = re.findall(r"(\b(?:19|20)\d\d)", safe_text)
         # Builds iso formatted dates
         yyyymmdd = self.__format_date(re_yyyymmdd, "%Y-%m-%d")
@@ -56,7 +73,8 @@ class RegExParser:
         ddmmyy = self.__format_date(re_ddmmyy, "%d-%m-%y")
         yyyymm = self.__format_date(re_yyyymm, "%Y-%m")
         mmyyyy = self.__format_date(re_mmyyyy, "%m-%Y")
-        yyyy = datetime.strptime(re_yyyy[0], "%Y").isoformat()[:10] if re_yyyy else None 
+        yyyy = datetime.strptime(re_yyyy[0], "%Y").isoformat()[
+            :10] if re_yyyy else None
         # return in order of preference
         return yyyymmdd or ddmmyyyy or yymmdd or ddmmyy or yyyymm or mmyyyy or yyyy
 
@@ -69,7 +87,8 @@ class RegExParser:
         file_actors = []
         if self._groups.get("performers"):
             if self._splitter is not None:
-                file_actors = self._groups.get("performers").split(self._splitter)
+                file_actors = self._groups.get(
+                    "performers").split(self._splitter)
             else:
                 file_actors = [self._groups.get("performers")]
         return file_actors
@@ -78,24 +97,22 @@ class RegExParser:
         file_tags = []
         if self._groups.get("tags"):
             if self._splitter is not None:
-                file_tags = self._groups.get("tags").split(self._tags_splitter)
+                file_tags = self._groups.get("tags").split(self._splitter)
             else:
                 file_tags = [self._groups.get("tags")]
         return file_tags
 
-    def parse(self, defaults = {}):
+    def parse(self, defaults={}):
         if self._re_config_file is None:
             return
         if defaults is None:
             defaults = {}
-        # Scope defaults to the full path. Change to filename if so configured 
-        if self._scope is not None and self._scope.lower() == "filename":
-            self._name = os.path.split(self._scene_path)[1]
-        else:
-            self._name = self._scene_path
         # Match the regex against the file name
         matches = re.match(self._regex, self._name)
         self._groups = matches.groupdict() if matches else {}
+        if not self._groups:
+            log.LogInfo("Regex found in {}, is NOT matching '{}'".format(
+                self._re_config_file, self._name))
         file_data = {
             "file": self._re_config_file,
             "source": "re",
@@ -108,7 +125,7 @@ class RegExParser:
             "date": self.__extract_re_date() or defaults.get("date"),
             "actors": self.__extract_re_actors() or defaults.get("actors"),
             # tags are merged with defaults
-            "tags": list(set(self.__extract_re_tags() + (defaults.get("tags") or []))), 
+            "tags": list(set(self.__extract_re_tags() + (defaults.get("tags") or []))),
             "rating": self._groups.get("rating") or defaults.get("rating"),
             "cover_image": None,
             "other_image": None,
