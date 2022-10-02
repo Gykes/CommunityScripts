@@ -38,12 +38,12 @@ class NfoSceneParser:
         if self._file_data is None:
             re_parser = reParser.RegExParser(self._stash_scene["path"])
             self._file_data = re_parser.parse(self._folder_data)
-        if self._file_data is None:
-            log.LogDebug("No matching NFO or RE found: nothing done...")
-            return
 
     def update(self):
         ''' Update the parsed data into stash db (or create them if missing) '''
+        if self._file_data is None:
+            log.LogDebug("No matching NFO or RE found: nothing done...")
+            return
         # Update scene data from parsed info (and retrieve/create performers, studios, movies,...)
         scene_data = self.__find_create_scene_data()
         # [ ] Possible improvement: enrich nfo scene index from regex matched index ?
