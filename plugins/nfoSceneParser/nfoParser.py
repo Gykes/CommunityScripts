@@ -152,7 +152,7 @@ class NfoParser:
             "details": self._nfo_root.findtext("plot") or self._nfo_root.findtext("outline") or self._nfo_root.findtext("tagline") or defaults.get("details"),
             "studio": self._nfo_root.findtext("studio") or defaults.get("studio"),
             "date": self.__extract_nfo_date() or defaults.get("date"),
-            "actors": self.__extract_nfo_actors() or defaults.get("actors"),
+            "actors": self.__extract_nfo_actors() or (defaults.get("actors") or []),
             # tags are merged with defaults
             "tags": list(set(self.__extract_nfo_tags() + (defaults.get("tags") or []))),
             "rating": self.__extract_nfo_rating() or defaults.get("rating"),

@@ -123,7 +123,7 @@ class RegExParser:
             "movie": self._groups.get("movie") or defaults.get("title"),
             "scene_index": self._groups.get("index") or defaults.get("scene_index"),
             "date": self.__extract_re_date() or defaults.get("date"),
-            "actors": self.__extract_re_actors() or defaults.get("actors"),
+            "actors": self.__extract_re_actors() or (defaults.get("actors") or []),
             # tags are merged with defaults
             "tags": list(set(self.__extract_re_tags() + (defaults.get("tags") or []))),
             "rating": self._groups.get("rating") or defaults.get("rating"),
