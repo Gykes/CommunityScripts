@@ -14,9 +14,9 @@ class RegExParser:
             os.path.dirname(scene_path))
         self._groups = {}
 
-    def __find_re_config(self, dir):
-        parent_dir = os.path.dirname(dir)
-        re_config_file = os.path.join(dir, "nfoSceneParser.json")
+    def __find_re_config(self, path):
+        parent_dir = os.path.dirname(path)
+        re_config_file = os.path.join(path, "nfoSceneParser.json")
         if os.path.exists(re_config_file):
             # Found => load yaml config
             try:
@@ -37,7 +37,7 @@ class RegExParser:
                 log.LogInfo("Could not load regex config file '{}': {}".format(
                     re_config_file, e))
                 return
-        elif dir != parent_dir:
+        elif path != parent_dir:
             # Not found => look in parent
             return self.__find_re_config(parent_dir)
         log.LogDebug("No re config found for {}".format(self._scene_path))

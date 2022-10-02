@@ -48,9 +48,9 @@ class NfoParser:
                 index += 1
         return thumb_images
 
-    def ___extract_thumb_urls(self, filter):
+    def ___extract_thumb_urls(self, query):
         result = []
-        matches = self._nfo_root.findall(filter)
+        matches = self._nfo_root.findall(query)
         for match in matches:
             result.append(match.text)
         return result
@@ -94,9 +94,9 @@ class NfoParser:
         rating = None
         rating_elem = self._nfo_root.find("ratings/rating")
         if rating_elem is not None:
-            max = float(rating_elem.attrib["max"])
+            max_value = float(rating_elem.attrib["max"])
             value = float(rating_elem.findtext("value"))
-            rating = round(value / (max / 5))
+            rating = round(value / (max_value / 5))
         return rating
 
     def __extract_nfo_date(self):
@@ -138,7 +138,7 @@ class NfoParser:
                 clean_nfo_content = nfo.read().strip()
             self._nfo_root = xml.fromstring(clean_nfo_content)
         except Exception as e:
-            log.LogError("Could not parse nfo '{}'".format(self._nfo_file, e))
+            log.LogError(f"Could not parse nfo '{self._nfo_file}': {e}")
             return
         # Extract data from XML tree. Spec: https://kodi.wiki/view/NFO_files/Movies
         b64_images = self.__extract_cover_images_b64()

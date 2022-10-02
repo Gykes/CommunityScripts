@@ -53,7 +53,7 @@ class StashInterface:
             }
         }    
         """
-        input = {
+        input_data = {
             "id": scene_id,
             "title": scene_data["title"],
             "details": scene_data["details"],
@@ -65,7 +65,7 @@ class StashInterface:
             "tag_ids": scene_data["tag_ids"],
         }
         if scene_data["cover_image"] is not None:
-            input.update({"cover_image": scene_data["cover_image"]})
+            input_data.update({"cover_image": scene_data["cover_image"]})
         # Update to "organized" according to config
         if config.set_organized_nfo and scene_data["source"] == "nfo":
             has_mandatory_tags = True
@@ -76,15 +76,15 @@ class StashInterface:
                     has_mandatory_tags = False
                     break
             if has_mandatory_tags:
-                input.update({"organized": True})
+                input_data.update({"organized": True})
         # Update movie if exists
         if scene_data["movie_id"] is not None:
-            input["movies"] = {
+            input_data["movies"] = {
                 "movie_id": scene_data["movie_id"],
                 "scene_index": scene_data["scene_index"],
             }
         variables = {
-            "input": input
+            "input": input_data
         }
         result = self.__callGraphQL(query, variables)
         return result.get("sceneUpdate")
@@ -307,12 +307,12 @@ class StashInterface:
         # Stash GraphQL endpoint
         graphql_url = f"{graphql_scheme}://{graphql_domain}:{graphql_port}/graphql"
 
-        json = {"query": query}
+        graphql_json = {"query": query}
         if variables is not None:
-            json["variables"] = variables
+            graphql_json["variables"] = variables
         try:
             response = requests.post(
-                graphql_url, json=json, headers=graphql_headers, cookies=graphql_cookies, timeout=20)
+                graphql_url, json=graphql_json, headers=graphql_headers, cookies=graphql_cookies, timeout=20)
         except Exception as e:
             self.exit_plugin(err=f"[FATAL] Error with the graphql request {e}")
         if response.status_code == 200:

@@ -126,7 +126,7 @@ class NfoSceneParser:
             else:
                 performer_ids.append(matching_id)
                 log.LogDebug(f"Matched existing performer '{actor}' with id {matching_id} \
-                    (direct: \{match_direct}, alias: {match_alias}, match_count: {match_count})")
+                    (direct: {match_direct}, alias: {match_alias}, match_count: {match_count})")
                 if match_count > 1:
                     log.LogInfo(f"Linked scene with title '{self._file_data['title']}' to existing \
                         performer '{actor}' (id {matching_id}). Attention: {match_count} matches \
