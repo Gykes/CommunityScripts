@@ -51,7 +51,7 @@ class NfoSceneParser:
             if scene_data.get("cover_image") is not None:
                 scene_data["cover_image"] = "*** Base64 encoded image removed for readability ***"
             log.LogInfo(
-                f"Dry mode. Would have updated scene based on: {json.dumps(scene_data, indent=3)}")
+                f"Dry mode. Would have updated scene based on: {json.dumps(scene_data)}")
             return
         updated_scene = stash.updateScene(self._scene_id, scene_data)
         if updated_scene is not None and updated_scene["id"] == str(self._scene_id):
