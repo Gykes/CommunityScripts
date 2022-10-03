@@ -136,10 +136,13 @@ class NfoParser:
         if defaults is None:
             defaults = {"actors": [], "tags": []}
         log.LogDebug("Parsing '{}'".format(self._nfo_file))
-        # Parse NFO xml content (stripping non-standard whitespaces/new lines)
+        # Parse NFO xml content
         try:
             with open(self._nfo_file, "r") as nfo:
+                # Tolerance: strip non-standard whitespaces/new lines
                 clean_nfo_content = nfo.read().strip()
+            # Tolerance: replace illegal "&nbsp;"
+            clean_nfo_content = clean_nfo_content.replace("&nbsp;", " ")
             self._nfo_root = xml.fromstring(clean_nfo_content)
         except Exception as e:
             log.LogError(f"Could not parse nfo '{self._nfo_file}': {e}")
