@@ -36,7 +36,9 @@ class NfoParser:
         path_no_ext = os.path.splitext(self._nfo_file)[0]
         file_no_ext = os.path.split(path_no_ext)[1]
         files = sorted(glob.glob(f"{path_no_ext}*.*"))
-        file_pattern = re.compile("^.*" + re.escape(file_no_ext) + "(-landscape\\d{0,2}|-thumb\\d{0,2}|-poster\\d{0,2}|-cover\\d{0,2}|\\d{0,2})\\.(jpe?g|png)$", re.I)
+        file_pattern = re.compile("^.*" + re.escape(file_no_ext) + \
+            "(-landscape\\d{0,2}|-thumb\\d{0,2}|-poster\\d{0,2}|-cover\\d{0,2}|\\d{0,2})\\.(jpe?g|png)$", \
+            re.I)
         index = 0
         for file in files:
             if index >= self._image_Max:
@@ -80,11 +82,12 @@ class NfoParser:
     def __extract_cover_images_b64(self):
         file_images = []
         # Get image from disk (file), otherwise from <thumb> tag (url)
-        thumb_images =  self.__read_cover_image_file() or self.__download_cover_images()
+        thumb_images = self.__read_cover_image_file() or self.__download_cover_images()
         for thumb_image in thumb_images:
             thumb_b64img = base64.b64encode(thumb_image)
             if thumb_b64img:
-                file_images.append(f"data:image/jpeg;base64,{thumb_b64img.decode('utf-8')}")
+                file_images.append(
+                    f"data:image/jpeg;base64,{thumb_b64img.decode('utf-8')}")
         return file_images
 
     def __extract_nfo_rating(self):
@@ -126,12 +129,12 @@ class NfoParser:
             file_actors.append(actor.text)
         return file_actors
 
-    def parse(self, defaults={}):
+    def parse(self, defaults={"actors": [], "tags": []}):
         ''' Parses the nfo (with xml parser) '''
         if not os.path.exists(self._nfo_file):
             return
         if defaults is None:
-            defaults = {}
+            defaults = {"actors": [], "tags": []}
         log.LogDebug("Parsing '{}'".format(self._nfo_file))
         # Parse NFO xml content (stripping non-standard whitespaces/new lines)
         try:
@@ -158,7 +161,6 @@ class NfoParser:
             "rating": self.__extract_nfo_rating() or defaults.get("rating"),
             "cover_image": None if len(b64_images) < 1 else b64_images[0],
             "other_image": None if len(b64_images) < 2 else b64_images[1],
-
             # Below are NFO extensions or liberal tag interpretations (not part of the standard KODI tags)
             "movie": self._nfo_root.findtext("set/name") or defaults.get("title"),
             "scene_index": self._nfo_root.findtext("set/index"),

@@ -102,11 +102,11 @@ class RegExParser:
                 file_tags = [self._groups.get("tags")]
         return file_tags
 
-    def parse(self, defaults={}):
+    def parse(self, defaults={"actors": [], "tags": []}):
         if self._re_config_file is None:
             return
         if defaults is None:
-            defaults = {}
+            defaults = {"actors": [], "tags": []}
         # Match the regex against the file name
         matches = re.match(self._regex, self._name)
         self._groups = matches.groupdict() if matches else {}

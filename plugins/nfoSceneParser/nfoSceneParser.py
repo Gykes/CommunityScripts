@@ -41,7 +41,8 @@ class NfoSceneParser:
 
     def update(self):
         ''' Update the parsed data into stash db (or create them if missing) '''
-        if self._file_data is None:
+        # Must have found at least a "title" in the nfo or regex...
+        if self._file_data is None or not self._file_data["title"]:
             log.LogDebug("No matching NFO or RE found: nothing done...")
             return
         # Update scene data from parsed info (and retrieve/create performers, studios, movies,...)
