@@ -28,7 +28,7 @@ blacklist = ["rating"]
 
 # List of tags that will never be created or set to the scene.
 # Example: blacklisted_tags = ["HD", "Now in HD"]
-blacklisted_tags = ["HD", "4K", "Now in HD"]
+blacklisted_tags = ["HD", "4K", "Now in HD", "1080p Video", "4k Video"]
 
 ###############################################################################
 # Do not change config below unless you are absolutely sure of what you do...

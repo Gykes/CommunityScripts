@@ -10,40 +10,45 @@ import stashInterface
 class NfoSceneParser:
     '''stash plugin'''
 
-    def __init__(self, scene_id):
-        self._scene_id = scene_id
+    def __init__(self, stash):
+        self._stash = stash
+        self._scene_id = stash.get_scene_id()
         self._folder_data = {}
         self._file_data = {}
         # Get the scene details if needed
-        if type(scene_id) is dict:
-            self._stash_scene = scene_id
-            self._scene_id = self._stash_scene["id"]
-        elif type(scene_id) is int:
-            self._stash_scene = stash.getScene(scene_id)
+        if type(self._scene_id) is dict:
+            self._scene = self._scene_id
+            self._scene_id = self._scene["id"]
+        elif type(self._scene_id) is int:
+            self._scene = stash.getScene(self._scene_id)
 
-    def parse(self):
+    def __parse(self):
         ''' Parse data from files, from nfo or regex pattern matching on the filename itself '''
-        if self._stash_scene["organized"] and config.skip_organized:
-            log.LogDebug(
-                f"Skipping already organized scene id: {self._stash_scene['id']}")
+        if self._scene["organized"] and config.skip_organized:
+            log.LogInfo(
+                f"Skipping already organized scene id: {self._scene['id']}")
             return
         # Parse folder nfo (used as default)
-        folder_nfo_parser = nfoParser.NfoParser(
-            self._stash_scene["path"], True)
+        folder_nfo_parser = nfoParser.NfoParser(self._scene["path"], None, True)
         self._folder_data = folder_nfo_parser.parse()
-        # Parse scene nfo
-        nfo_parser = nfoParser.NfoParser(self._stash_scene["path"])
-        self._file_data = nfo_parser.parse(self._folder_data)
-        # Fallback to re parser
-        if self._file_data is None:
-            re_parser = reParser.RegExParser(self._stash_scene["path"])
-            self._file_data = re_parser.parse(self._folder_data)
+        # Parse scene nfo (nfo & regex).
+        re_parser = reParser.RegExParser(self._scene["path"], [ \
+            self._folder_data or reParser.RegExParser.empty_defaults \
+            ])
+        re_file_data = re_parser.parse()
+        nfo_parser = nfoParser.NfoParser(self._scene["path"], [ \
+            self._folder_data or nfoParser.NfoParser.empty_defaults, \
+            re_file_data or nfoParser.NfoParser.empty_defaults \
+            ])
+        nfo_file_data = nfo_parser.parse()
+        # nfo as preferred input. re as fallback
+        self._file_data = nfo_file_data or re_file_data
 
-    def update(self):
+    def __update(self):
         ''' Update the parsed data into stash db (or create them if missing) '''
         # Must have found at least a "title" in the nfo or regex...
-        if self._file_data is None or not self._file_data["title"]:
-            log.LogDebug("No matching NFO or RE found: nothing done...")
+        if not self._file_data or not self._file_data.get("title"):
+            log.LogDebug("Skipped or no matching NFO or RE found: nothing done...")
             return
         # Update scene data from parsed info (and retrieve/create performers, studios, movies,...)
         scene_data = self.__find_create_scene_data()
@@ -54,7 +59,7 @@ class NfoSceneParser:
             log.LogInfo(
                 f"Dry mode. Would have updated scene based on: {json.dumps(scene_data)}")
             return
-        updated_scene = stash.updateScene(self._scene_id, scene_data)
+        updated_scene = self._stash.updateScene(self._scene_id, scene_data)
         if updated_scene is not None and updated_scene["id"] == str(self._scene_id):
             log.LogInfo(
                 f"Successfully updated scene: {self._scene_id} using '{self._file_data['file']}'")
@@ -94,7 +99,9 @@ class NfoSceneParser:
         performer_ids = []
         created_performers = []
         for actor in self._file_data["actors"]:
-            performers = stash.findPerformers(actor)
+            if not actor:
+                continue
+            performers = self._stash.findPerformers(actor)
             match_direct = False
             match_alias = False
             matching_id = None
@@ -102,28 +109,28 @@ class NfoSceneParser:
             # 1st pass for direct name matches
             for performer in performers["performers"]:
                 if self.__is_matching(actor, performer["name"]):
-                    if matching_id is None:
+                    if not matching_id:
                         matching_id = performer["id"]
                         match_direct = True
                     match_count += 1
             # 2nd pass for alias matches
-            if matching_id is None and config.search_performer_aliases \
+            if not matching_id and config.search_performer_aliases \
                 and (config.ignore_single_name_performer_aliases is False or " " in actor):
                 for performer in performers["performers"]:
                     if performer["aliases"]:
                         for alias in performer["aliases"].split(", "):
                             if self.__is_matching(actor, alias):
-                                if matching_id is None:
+                                if not matching_id:
                                     matching_id = performer["id"]
                                     match_alias = True
                                 match_count += 1
             # Create a new performer when it does not exist
-            if matching_id is None:
+            if not matching_id:
                 if not config.create_missing_performers or config.dry_mode:
                     log.LogInfo(
                         f"'{actor}' performer creation prevented by config (dry_mode or create_missing_xxx)")
                 else:
-                    new_performer = stash.performerCreate(actor)
+                    new_performer = self._stash.performerCreate(actor)
                     created_performers.append(actor)
                     performer_ids.append(new_performer["id"])
             else:
@@ -139,10 +146,10 @@ class NfoSceneParser:
         return performer_ids
 
     def __find_create_studio(self) -> str:
-        if self._file_data["studio"] is None:
+        if not self._file_data["studio"]:
             return ""
         studio_id = None
-        studios = stash.findStudios(self._file_data["studio"])
+        studios = self._stash.findStudios(self._file_data["studio"])
         match_direct = False
         match_alias = False
         matching_id = None
@@ -150,27 +157,27 @@ class NfoSceneParser:
         # 1st pass for direct name matches
         for studio in studios["studios"]:
             if self.__is_matching(self._file_data["studio"], studio["name"]):
-                if matching_id is None:
+                if not matching_id:
                     matching_id = studio["id"]
                     match_direct = True
                 match_count += 1
         # 2nd pass for alias matches
-        if matching_id is None and config.search_studio_aliases:
+        if not matching_id and config.search_studio_aliases:
             for studio in studios["studios"]:
                 if studio["aliases"]:
                     for alias in studio["aliases"].split(", "):
                         if self.__is_matching(self._file_data["studio"], alias):
-                            if matching_id is None:
+                            if not matching_id:
                                 matching_id = studio["id"]
                                 match_alias = True
                             match_count += 1
         # Create a new studio when it does not exist
-        if matching_id is None:
+        if not matching_id:
             if not config.create_missing_studio or config.dry_mode:
                 log.LogInfo(
                     f"'{self._file_data['studio']}' studio creation prevented by config (dry_mode or create_missing_xxx)")
             else:
-                new_studio = stash.studioCreate(self._file_data["studio"])
+                new_studio = self._stash.studioCreate(self._file_data["studio"])
                 studio_id = new_studio["id"]
                 log.LogInfo(f"Created missing studio '{self._file_data['studio']}' with id {new_studio['id']}")
         else:
@@ -187,24 +194,24 @@ class NfoSceneParser:
         created_tags = []
         blacklisted_tags = [tag.lower() for tag in config.blacklisted_tags]
         for file_tag in self._file_data["tags"]:
-            # skip blacklisted tags
-            if file_tag.lower() in blacklisted_tags:
+            # skip empty or blacklisted tags
+            if not file_tag or file_tag.lower() in blacklisted_tags:
                 continue
             # find stash tags
-            tags = stash.findTags(file_tag)
+            tags = self._stash.findTags(file_tag)
             matching_id = None
             # Ensure direct name match
             for tag in tags["tags"]:
                 if self.__is_matching(file_tag, tag["name"]):
-                    if matching_id is None:
+                    if not matching_id:
                         matching_id = tag["id"]
             # Create a new tag when it does not exist
-            if matching_id is None:
+            if not matching_id:
                 if not config.create_missing_tags or config.dry_mode:
                     log.LogDebug(
                         f"'{file_tag}' tag creation prevented by config (dry_mode or create_missing_xxx)")
                 else:
-                    new_tag = stash.tagCreate(file_tag)
+                    new_tag = self._stash.tagCreate(file_tag)
                     created_tags.append(file_tag)
                     tag_ids.append(new_tag["id"])
             else:
@@ -216,23 +223,23 @@ class NfoSceneParser:
         return tag_ids
 
     def __find_create_movie(self, studio_id):
-        if self._file_data["movie"] is None:
+        if not self._file_data["movie"]:
             return
         movie_id = None
-        movies = stash.findMovies(self._file_data["movie"])
+        movies = self._stash.findMovies(self._file_data["movie"])
         matching_id = None
         # Ensure direct name match
         for movie in movies["movies"]:
             if self.__is_matching(self._file_data["movie"], movie["name"]):
-                if matching_id is None:
+                if not matching_id:
                     matching_id = movie["id"]
         # Create a new movie when it does not exist
-        if matching_id is None:
+        if not matching_id:
             if not config.create_missing_movie or config.dry_mode:
                 log.LogInfo(
                     f"'{self._file_data['movie']}' movie creation prevented by config (dry_mode or create_missing_xxx)")
             else:
-                new_movie = stash.movieCreate(
+                new_movie = self._stash.movieCreate(
                     self._file_data, studio_id, self._folder_data)
                 movie_id = new_movie["id"]
                 log.LogInfo("Created missing movie '{}' with id {}".format(
@@ -244,16 +251,20 @@ class NfoSceneParser:
                 self._file_data["movie"], matching_id))
         return movie_id
 
+    def process(self):
+        self.__parse()
+        self.__update()
 
-# Init
-if len(sys.argv) > 1:
-    # Loads from argv for CLI testing...
-    fragment = json.loads(sys.argv[1])
-else:
-    fragment = json.loads(sys.stdin.read())
-stash = stashInterface.StashInterface(fragment)
-# Parse file data and update scene (+ create missing performer, tag, movie,...)
-nfoSceneParser = NfoSceneParser(stash.get_scene_id())
-nfoSceneParser.parse()
-nfoSceneParser.update()
-stash.exit_plugin("Successful!")
+
+if __name__ == '__main__':
+    # Init
+    if len(sys.argv) > 1:
+        # Loads from argv for CLI testing...
+        fragment = json.loads(sys.argv[1])
+    else:
+        fragment = json.loads(sys.stdin.read())
+    stash_interface = stashInterface.StashInterface(fragment)
+    # Parse file data and update scene (+ create missing performer, tag, movie,...)
+    nfoSceneParser = NfoSceneParser(stash_interface)
+    nfoSceneParser.process()
+    stash_interface.exit_plugin("Successful!")

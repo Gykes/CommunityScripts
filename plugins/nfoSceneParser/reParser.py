@@ -8,7 +8,15 @@ import log
 class RegExParser:
     ''' Parse filenames (with regex) '''
 
-    def __init__(self, scene_path):
+    empty_defaults = { "actors": [], "tags": [] }
+
+    def __init__(self, scene_path, defaults=None):
+        ''' 
+        - defaults: List of previous parse() results that to use as default value
+            Defaults are used when no data is found in the current nfo (or there are no nfo).
+            Default are process in the order in the list. The first key match is used.
+        '''
+        self._defaults = defaults or [self.empty_defaults]
         self._scene_path = scene_path
         self._re_config_file = self.__find_re_config(
             os.path.dirname(scene_path))
@@ -30,12 +38,10 @@ class RegExParser:
                     self._name = os.path.split(self._scene_path)[1]
                 else:
                     self._name = self._scene_path
-                log.LogDebug(
-                    "Using regex config file {}".format(re_config_file))
+                log.LogDebug(f"Using regex config file {re_config_file}")
                 return re_config_file
             except Exception as e:
-                log.LogInfo("Could not load regex config file '{}': {}".format(
-                    re_config_file, e))
+                log.LogInfo(f"Could not load regex config file '{re_config_file}': {e}")
                 return
         elif path != parent_dir:
             # Not found => look in parent
@@ -102,31 +108,33 @@ class RegExParser:
                 file_tags = [self._groups.get("tags")]
         return file_tags
 
-    def parse(self, defaults={"actors": [], "tags": []}):
-        if self._re_config_file is None:
+    def __get_default(self, key):
+        for default in self._defaults:
+            if default.get(key) is not None:
+                return default.get(key)
+
+    def parse(self):
+        if not self._re_config_file:
             return
-        if defaults is None:
-            defaults = {"actors": [], "tags": []}
         # Match the regex against the file name
         matches = re.match(self._regex, self._name)
         self._groups = matches.groupdict() if matches else {}
         if not self._groups:
-            log.LogInfo("Regex found in {}, is NOT matching '{}'".format(
-                self._re_config_file, self._name))
+            log.LogInfo(f"Regex found in {self._re_config_file}, is NOT matching '{self._name}'")
         file_data = {
             "file": self._re_config_file,
             "source": "re",
             "title": self._groups.get("title"),
-            "director": self._groups.get("director") or defaults.get("director"),
-            "details": defaults.get("details"),
-            "studio": self._groups.get("studio") or defaults.get("studio"),
-            "movie": self._groups.get("movie") or defaults.get("title"),
-            "scene_index": self._groups.get("index") or defaults.get("scene_index"),
-            "date": self.__extract_re_date() or defaults.get("date"),
-            "actors": self.__extract_re_actors() or (defaults.get("actors") or []),
+            "director": self._groups.get("director") or self.__get_default("director"),
+            "details": self.__get_default("details"),
+            "studio": self._groups.get("studio") or self.__get_default("studio"),
+            "movie": self._groups.get("movie") or self.__get_default("title"),
+            "scene_index": self._groups.get("index") or self.__get_default("scene_index"),
+            "date": self.__extract_re_date() or self.__get_default("date"),
+            "actors": self.__extract_re_actors() or self.__get_default("actors"),
             # tags are merged with defaults
-            "tags": list(set(self.__extract_re_tags() + (defaults.get("tags") or []))),
-            "rating": self._groups.get("rating") or defaults.get("rating"),
+            "tags": list(set(self.__extract_re_tags() + self.__get_default("tags"))),
+            "rating": self._groups.get("rating") or self.__get_default("rating"),
             "cover_image": None,
             "other_image": None,
             "url": None,

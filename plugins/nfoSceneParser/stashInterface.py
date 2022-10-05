@@ -278,7 +278,7 @@ class StashInterface:
         return result.get("findTags")
 
     def exit_plugin(self, msg=None, err=None):
-        if msg is None and err is None:
+        if not msg and not err:
             msg = "plugin ended"
         log.LogDebug(f"Execution time: {round(time.time() - self._start, 3)}s")
         output_json = {"output": msg, "error": err}
@@ -289,7 +289,7 @@ class StashInterface:
         # Session cookie for authentication (supports API key for CLI tests)
         graphql_port = str(self._fragment_server["Port"])
         graphql_scheme = self._fragment_server["Scheme"]
-        graphql_cookies = "" if self._fragment_server.get("SessionCookie") is None else {
+        graphql_cookies = "" if not self._fragment_server.get("SessionCookie") else {
             "session": self._fragment_server["SessionCookie"]["Value"]}
         graphql_headers = {
             "Accept-Encoding": "gzip, deflate, br",
