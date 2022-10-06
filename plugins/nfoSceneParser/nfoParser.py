@@ -106,8 +106,8 @@ class NfoParser:
         rating = None
         rating_elem = self._nfo_root.find("ratings/rating")
         if rating_elem is not None:
-            max_value = float(rating_elem.attrib["max"])
-            value = float(rating_elem.findtext("value"))
+            max_value = float(rating_elem.attrib["max"] or 1)
+            value = float(rating_elem.findtext("value") or 0)
             rating = round(value / (max_value / 5))
         return rating
 
@@ -137,8 +137,11 @@ class NfoParser:
             file_actors.append(actor.text)
         return file_actors
 
-    def __get_default(self, key):
+    def __get_default(self, key, source=None):
         for default in self._defaults:
+            # Source filter: skip default if it is not of the specified source
+            if source and default.get("source") != source:
+                continue
             if default.get(key) is not None:
                 return default.get(key)
 
@@ -164,7 +167,7 @@ class NfoParser:
             # TODO: supports stash uniqueid to match to existing scenes (compatibility with nfo exporter)
             "file": self._nfo_file,
             "source": "nfo",
-            "title": self._nfo_root.findtext("title") or self._nfo_root.findtext("originaltitle") or self._nfo_root.findtext("sorttitle") or self.__get_default("title"),
+            "title": self._nfo_root.findtext("title") or self._nfo_root.findtext("originaltitle") or self._nfo_root.findtext("sorttitle") or self.__get_default("title", "re"),
             "director": self._nfo_root.findtext("director") or self.__get_default("director"),
             "details": self._nfo_root.findtext("plot") or self._nfo_root.findtext("outline") or self._nfo_root.findtext("tagline") or self.__get_default("details"),
             "studio": self._nfo_root.findtext("studio") or self.__get_default("studio"),
@@ -176,7 +179,7 @@ class NfoParser:
             "cover_image": None if len(b64_images) < 1 else b64_images[0],
             "other_image": None if len(b64_images) < 2 else b64_images[1],
             # Below are NFO extensions or liberal tag interpretations (not part of the standard KODI tags)
-            "movie": self._nfo_root.findtext("set/name") or (self._defaults[0].get("title") if len(self._defaults) > 0 else None),
+            "movie": self._nfo_root.findtext("set/name") or self.__get_default("title", "nfo"),
             "scene_index": self._nfo_root.findtext("set/index"),
             "url": self._nfo_root.findtext("url"),
         }

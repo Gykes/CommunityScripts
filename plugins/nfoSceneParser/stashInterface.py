@@ -31,8 +31,49 @@ class StashInterface:
         }
         fragment SceneData on Scene {
             id
+            title
+            details
+            url
+            date
+            rating
             organized
             path
+            studio {
+                ...SlimStudioData
+            }
+            movies {
+                movie {
+                    ...SlimMovieData
+                }
+                scene_index
+            }
+            tags {
+                ...SlimTagData
+            }
+            performers {
+                ...SlimPerformerData
+            }
+            stash_ids {
+                endpoint
+                stash_id
+            }
+        }
+        fragment SlimStudioData on Studio {
+            id
+            name
+        }
+        fragment SlimMovieData on Movie {
+            id
+            name
+            director
+        }
+        fragment SlimTagData on Tag {
+            id
+            name
+        }
+        fragment SlimPerformerData on Performer {
+            id
+            name
         }
         """
         variables = {
@@ -317,8 +358,8 @@ class StashInterface:
             self.exit_plugin(err=f"[FATAL] Error with the graphql request {e}")
         if response.status_code == 200:
             result = response.json()
-            if result.get("error"):
-                for error in result["error"]["errors"]:
+            if result.get("errors"):
+                for error in result["errors"]:
                     raise Exception(f"GraphQL error: {error}")
                 return None
             if result.get("data"):

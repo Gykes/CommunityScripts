@@ -29,63 +29,79 @@ class NfoSceneParser:
                 f"Skipping already organized scene id: {self._scene['id']}")
             return
         # Parse folder nfo (used as default)
-        folder_nfo_parser = nfoParser.NfoParser(self._scene["path"], None, True)
+        folder_nfo_parser = nfoParser.NfoParser(
+            self._scene["path"], None, True)
         self._folder_data = folder_nfo_parser.parse()
         # Parse scene nfo (nfo & regex).
-        re_parser = reParser.RegExParser(self._scene["path"], [ \
-            self._folder_data or reParser.RegExParser.empty_defaults \
-            ])
+        re_parser = reParser.RegExParser(self._scene["path"], [
+            self._folder_data or reParser.RegExParser.empty_defaults
+        ])
         re_file_data = re_parser.parse()
-        nfo_parser = nfoParser.NfoParser(self._scene["path"], [ \
-            self._folder_data or nfoParser.NfoParser.empty_defaults, \
-            re_file_data or nfoParser.NfoParser.empty_defaults \
-            ])
+        nfo_parser = nfoParser.NfoParser(self._scene["path"], [
+            self._folder_data or nfoParser.NfoParser.empty_defaults,
+            re_file_data or nfoParser.NfoParser.empty_defaults
+        ])
         nfo_file_data = nfo_parser.parse()
         # nfo as preferred input. re as fallback
         self._file_data = nfo_file_data or re_file_data
+        return self._file_data
+
+    def __strip_b64(self, data):
+        if data.get("cover_image"):
+            data["cover_image"] = "*** Base64 encoded image removed for readability ***"
+        return json.dumps(data)
 
     def __update(self):
         ''' Update the parsed data into stash db (or create them if missing) '''
         # Must have found at least a "title" in the nfo or regex...
-        if not self._file_data or not self._file_data.get("title"):
-            log.LogDebug("Skipped or no matching NFO or RE found: nothing done...")
+        if not self._file_data:
+            log.LogDebug(
+                "Skipped or no matching NFO or RE found: nothing done...")
             return
-        # Update scene data from parsed info (and retrieve/create performers, studios, movies,...)
+        # Retrieve/create performers, studios, movies,...
         scene_data = self.__find_create_scene_data()
         # [ ] Possible improvement: enrich nfo scene index from regex matched index ?
         if config.dry_mode:
-            if scene_data.get("cover_image") is not None:
-                scene_data["cover_image"] = "*** Base64 encoded image removed for readability ***"
             log.LogInfo(
-                f"Dry mode. Would have updated scene based on: {json.dumps(scene_data)}")
+                f"Dry mode. Would have updated scene based on: {self.__strip_b64(scene_data)}")
             return
+        # Update scene data from parsed info
         updated_scene = self._stash.updateScene(self._scene_id, scene_data)
         if updated_scene is not None and updated_scene["id"] == str(self._scene_id):
             log.LogInfo(
                 f"Successfully updated scene: {self._scene_id} using '{self._file_data['file']}'")
         else:
-            log.LogInfo(
-                f"Error updating scene: {self._scene_id} from file. Enable debug log for details.")
+            log.LogError(
+                f"Error updating scene: {self._scene_id} based on: {self.__strip_b64(scene_data)}.")
+        return scene_data
 
     def __find_create_scene_data(self):
-        performer_ids = [] if "performers" in config.blacklist else self.__find_create_performers()
-        studio_id = [] if "studio" in config.blacklist else self.__find_create_studio()
-        tag_ids = [] if "tags" in config.blacklist else self.__find_create_tags()
-        movie_id = [] if "movie" in config.blacklist else self.__find_create_movie(
-            studio_id)
+        # Lookup and/or create satellite objects in stash database
+        file_performer_ids = [] if "performers" in config.blacklist else self.__find_create_performers()
+        file_tag_ids = [] if "tags" in config.blacklist else self.__find_create_tags()
+        file_studio_id = None if "studio" in config.blacklist else self.__find_create_studio()
+        file_movie_id = None if "movie" in config.blacklist else self.__find_create_movie(
+            file_studio_id)
+        # Existing scene data
+        scene_performer_ids = list(
+            map(lambda p: p.get("id"), self._scene["performers"]))
+        scene_tag_ids = list(map(lambda t: t.get("id"), self._scene["tags"]))
+        # Build data for scene update:
+        #  - Either new values or None (current data not modified).
+        #  - performers and tags are combined (new + existing)
         scene_data = {
             "source": self._file_data["source"],
-            "title": self._file_data["title"] if "title" not in config.blacklist else None,
-            "details": self._file_data["details"] if "details" not in config.blacklist else None,
-            "date": self._file_data["date"] if "date" not in config.blacklist else None,
-            "rating": self._file_data["rating"] if "rating" not in config.blacklist else None,
-            "url": self._file_data["url"] if "url" not in config.blacklist else None,
-            "studio_id": studio_id,
-            "performer_ids": performer_ids,
-            "tag_ids": tag_ids,
-            "movie_id": movie_id,
-            "scene_index": self._file_data["scene_index"],
-            "cover_image": self._file_data["cover_image"] if "image" not in config.blacklist else None,
+            "title": (self._file_data["title"] or None) if "title" not in config.blacklist else None,
+            "details": (self._file_data["details"] or None) if "details" not in config.blacklist else None,
+            "date": (self._file_data["date"] or None) if "date" not in config.blacklist else None,
+            "rating": (self._file_data["rating"] or None) if "rating" not in config.blacklist else None,
+            "url": (self._file_data["url"] or None) if "url" not in config.blacklist else None,
+            "studio_id": file_studio_id or None,
+            "performer_ids": list(set(file_performer_ids + scene_performer_ids)),
+            "tag_ids": list(set(file_tag_ids + scene_tag_ids)),
+            "movie_id": file_movie_id or None,
+            "scene_index": self._file_data["scene_index"] or None,
+            "cover_image": (self._file_data["cover_image"] or None) if "image" not in config.blacklist else None,
         }
         return scene_data
 
@@ -115,7 +131,7 @@ class NfoSceneParser:
                     match_count += 1
             # 2nd pass for alias matches
             if not matching_id and config.search_performer_aliases \
-                and (config.ignore_single_name_performer_aliases is False or " " in actor):
+                    and (config.ignore_single_name_performer_aliases is False or " " in actor):
                 for performer in performers["performers"]:
                     if performer["aliases"]:
                         for alias in performer["aliases"].split(", "):
@@ -177,9 +193,11 @@ class NfoSceneParser:
                 log.LogInfo(
                     f"'{self._file_data['studio']}' studio creation prevented by config (dry_mode or create_missing_xxx)")
             else:
-                new_studio = self._stash.studioCreate(self._file_data["studio"])
+                new_studio = self._stash.studioCreate(
+                    self._file_data["studio"])
                 studio_id = new_studio["id"]
-                log.LogInfo(f"Created missing studio '{self._file_data['studio']}' with id {new_studio['id']}")
+                log.LogInfo(
+                    f"Created missing studio '{self._file_data['studio']}' with id {new_studio['id']}")
         else:
             studio_id = matching_id
             log.LogDebug(f"Matched existing studio '{self._file_data['studio']}' with id \
@@ -252,8 +270,12 @@ class NfoSceneParser:
         return movie_id
 
     def process(self):
-        self.__parse()
-        self.__update()
+        file_data = self.__parse()
+        try:
+            scene_data = self.__update()
+        except Exception as e:
+            log.LogError(f"Error updating stash: {e}")
+        return [file_data, scene_data]
 
 
 if __name__ == '__main__':
