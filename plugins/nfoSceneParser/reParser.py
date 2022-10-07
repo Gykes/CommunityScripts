@@ -108,6 +108,12 @@ class RegExParser:
                 file_tags = [self._groups.get("tags")]
         return file_tags
 
+    def __extract_re_rating(self):
+        rating = round(float(self._groups.get("rating") or 0))
+        if rating > 0:
+            return rating
+        return 0
+
     def __get_default(self, key):
         for default in self._defaults:
             if default.get(key) is not None:
@@ -115,7 +121,7 @@ class RegExParser:
 
     def parse(self):
         if not self._re_config_file:
-            return
+            return {}
         # Match the regex against the file name
         matches = re.match(self._regex, self._name)
         self._groups = matches.groupdict() if matches else {}
@@ -134,7 +140,7 @@ class RegExParser:
             "actors": self.__extract_re_actors() or self.__get_default("actors"),
             # tags are merged with defaults
             "tags": list(set(self.__extract_re_tags() + self.__get_default("tags"))),
-            "rating": self._groups.get("rating") or self.__get_default("rating"),
+            "rating": self.__extract_re_rating() or self.__get_default("rating"),
             "cover_image": None,
             "other_image": None,
             "url": None,

@@ -32,6 +32,22 @@ regex patterns complies with Python's regular expressions. A good tool to write/
 
 nfoFileParser works without any config edits. If you want more control, have a look at `config.py`, where you can change some default behavior.
 
+## Reload task
+
+nfoFileParser typically processes everything during scan. If you want to reload the nfo/regex at a later time, you can execute a "reload" task.
+
+It works in three steps: configure, select & run:
+- Configure: edit `reload_tags` in the plugin's `config.py` file. Set the name to an existing tag in your stash. It is used as the 'marker" tag by the plugin to identify which scenes to reload.
+- Select: add the configured tag to your scenes to "mark" them.
+- Run: execute the "reload" task (stash's settings -> "plugin tasks" -> nfoSceneParser -> "Reload tagged scenes" button)
+
+A reload essentially merges the new file data with the existing scene data, giving priority to the nfo/regex content. More specifically:
+- For single-value fields, overrides what is already set if another content is found 
+- For single-value fields, keeps what is already set if nothing is found
+- For multi-value fields, adds to existing values.
+
+Note: The marker tag is removed from the reloaded scenes (unless it is present in the nfo or regex) => no need to remove it manually...
+
 # NFO files organization
 
 ## Scene NFO

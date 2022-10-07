@@ -148,7 +148,7 @@ class NfoParser:
     def parse(self):
         ''' Parses the nfo (with xml parser) '''
         if not os.path.exists(self._nfo_file):
-            return
+            return {}
         log.LogDebug("Parsing '{}'".format(self._nfo_file))
         # Parse NFO xml content
         try:
@@ -160,7 +160,7 @@ class NfoParser:
             self._nfo_root = xml.fromstring(clean_nfo_content)
         except Exception as e:
             log.LogError(f"Could not parse nfo '{self._nfo_file}': {e}")
-            return
+            return {}
         # Extract data from XML tree. Spec: https://kodi.wiki/view/NFO_files/Movies
         b64_images = self.__extract_cover_images_b64()
         file_data = {

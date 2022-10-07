@@ -11,10 +11,15 @@ class StashInterface:
     def __init__(self, fragment):
         self._start = time.time()
         self._fragment = fragment
+        self._mode = self._fragment['args'].get("mode") or "normal"
         self._fragment_server = self._fragment["server_connection"]
         self._plugin_dir = self._fragment_server["PluginDir"]
-        self._hook_type = self._fragment["args"]["hookContext"]["type"]
-        self._scene_id = self._fragment["args"]["hookContext"]["id"]
+        hook_ctx = self._fragment["args"].get("hookContext")
+        if hook_ctx:
+            self._hook_type = hook_ctx.get("type")
+            self._scene_id = hook_ctx.get("id")
+        else:
+            self._scene_id = None
         self._path_rewrite = self._fragment["args"].get("pathRewrite")
         log.LogDebug(
             f"Starting nfoSceneParser plugin for scene {self._scene_id}")
@@ -22,7 +27,10 @@ class StashInterface:
     def get_scene_id(self):
         return self._scene_id
 
-    def getScene(self, scene_id):
+    def get_mode(self):
+        return self._mode
+
+    def gql_findScene(self, scene_id):
         query = """
         query FindScene($id: ID!, $checksum: String) {
             findScene(id: $id, checksum: $checksum) {
@@ -79,14 +87,37 @@ class StashInterface:
         variables = {
             "id": scene_id
         }
-        result = self.__callGraphQL(query, variables)
+        result = self.__gql_call(query, variables)
         # Path rewriting used for testing only
         if (self._path_rewrite is not None):
             result["findScene"]["path"] = result["findScene"]["path"].replace(
                 self._path_rewrite[0], self._path_rewrite[1])
         return result.get("findScene")
 
-    def updateScene(self, scene_id, scene_data):
+    def gql_findScenes(self):
+        query = """
+        query FindScenes($filter: FindFilterType) {
+            findScenes(filter: $filter) {
+                count
+                scenes {
+                    ...SlimSceneData
+                }
+            }
+        }
+        fragment SlimSceneData on Scene {
+            id
+            organized
+            tags {
+                id
+                name
+            }
+        }
+        """
+        variables = {'filter': {"direction": "ASC", "page": 1, "per_page": -1, "sort": "updated_at"}}
+        result = self.__gql_call(query, variables)
+        return result.get("findScenes")
+
+    def gql_updateScene(self, scene_id, scene_data):
         query = """
         mutation sceneUpdate($input: SceneUpdateInput!) {
             sceneUpdate(input: $input) {
@@ -127,10 +158,10 @@ class StashInterface:
         variables = {
             "input": input_data
         }
-        result = self.__callGraphQL(query, variables)
+        result = self.__gql_call(query, variables)
         return result.get("sceneUpdate")
 
-    def performerCreate(self, name):
+    def gql_performerCreate(self, name):
         query = """
         mutation performerCreate($input: PerformerCreateInput!) {
             performerCreate(input: $input) {
@@ -143,10 +174,10 @@ class StashInterface:
                 "name": name
             }
         }
-        result = self.__callGraphQL(query, variables)
+        result = self.__gql_call(query, variables)
         return result.get("performerCreate")
 
-    def studioCreate(self, name):
+    def gql_studioCreate(self, name):
         query = """
         mutation studioCreate($input: StudioCreateInput!) {
             studioCreate(input: $input) {
@@ -159,10 +190,10 @@ class StashInterface:
                 "name": name
             }
         }
-        result = self.__callGraphQL(query, variables)
+        result = self.__gql_call(query, variables)
         return result.get("studioCreate")
 
-    def tagCreate(self, name):
+    def gql_tagCreate(self, name):
         query = """
         mutation tagCreate($input: TagCreateInput!) {
             tagCreate(input: $input) {
@@ -175,10 +206,10 @@ class StashInterface:
                 "name": name
             }
         }
-        result = self.__callGraphQL(query, variables)
+        result = self.__gql_call(query, variables)
         return result.get("tagCreate")
 
-    def movieCreate(self, file_data, studio_id, folder_data):
+    def gql_movieCreate(self, file_data, studio_id, folder_data):
         query = """
         mutation movieCreate($input: MovieCreateInput!) {
             movieCreate(input: $input) {
@@ -187,24 +218,24 @@ class StashInterface:
         }
         """
         # Use folder nfo data for some movie specific attributes (ignoring scene nfo specifics)
-        date = folder_data["date"] or file_data["date"]
+        date = folder_data.get("date") or file_data["date"]
         variables = {
             "input": {
                 "name": file_data["movie"],
                 "studio_id": studio_id if "studio" not in config.blacklist else None,
                 "date": date if "date" not in config.blacklist else None,
                 "director": file_data["director"] if "director" not in config.blacklist else None,
-                "synopsis": folder_data["details"] if "details" not in config.blacklist else None,
-                "rating": folder_data["rating"] if "rating" not in config.blacklist else None,
-                "url": folder_data["url"] if "url" not in config.blacklist else None,
-                "front_image": folder_data["cover_image"] if "cover_image" not in config.blacklist else None,
-                "back_image": folder_data["other_image"] if "cover_image" not in config.blacklist else None,
+                "synopsis": folder_data.get("details") if "details" not in config.blacklist else None,
+                "rating": folder_data.get("rating") if "rating" not in config.blacklist else None,
+                "url": folder_data.get("url") if "url" not in config.blacklist else None,
+                "front_image": folder_data.get("cover_image") if "cover_image" not in config.blacklist else None,
+                "back_image": folder_data.get("other_image") if "cover_image" not in config.blacklist else None,
             }
         }
-        result = self.__callGraphQL(query, variables)
+        result = self.__gql_call(query, variables)
         return result.get("movieCreate")
 
-    def findPerformers(self, name):
+    def gql_findPerformers(self, name):
         query = """
         query findPerformers($performer_filter: PerformerFilterType, $filter: FindFilterType) {
             findPerformers(performer_filter: $performer_filter, filter: $filter) {
@@ -233,10 +264,10 @@ class StashInterface:
                 "per_page": -1
             },
         }
-        result = self.__callGraphQL(query, variables)
+        result = self.__gql_call(query, variables)
         return result.get("findPerformers")
 
-    def findStudios(self, name):
+    def gql_findStudios(self, name):
         query = """
         query findStudios($studio_filter: StudioFilterType, $filter: FindFilterType) {
             findStudios(studio_filter: $studio_filter, filter: $filter) {
@@ -265,10 +296,10 @@ class StashInterface:
                 "per_page": -1
             },
         }
-        result = self.__callGraphQL(query, variables)
+        result = self.__gql_call(query, variables)
         return result.get("findStudios")
 
-    def findMovies(self, name):
+    def gql_findMovies(self, name):
         query = """
         query findMovies($movie_filter: MovieFilterType, $filter: FindFilterType) {
             findMovies(movie_filter: $movie_filter, filter: $filter) {
@@ -290,10 +321,10 @@ class StashInterface:
                 "per_page": -1
             },
         }
-        result = self.__callGraphQL(query, variables)
+        result = self.__gql_call(query, variables)
         return result.get("findMovies")
 
-    def findTags(self, name):
+    def gql_findTags(self, name):
         query = """
         query findTags($tag_filter: TagFilterType, $filter: FindFilterType) {
             findTags(tag_filter: $tag_filter, filter: $filter) {
@@ -315,7 +346,7 @@ class StashInterface:
                 "per_page": -1
             },
         }
-        result = self.__callGraphQL(query, variables)
+        result = self.__gql_call(query, variables)
         return result.get("findTags")
 
     def exit_plugin(self, msg=None, err=None):
@@ -326,7 +357,7 @@ class StashInterface:
         print(json.dumps(output_json))
         sys.exit()
 
-    def __callGraphQL(self, query, variables=None):
+    def __gql_call(self, query, variables=None):
         # Session cookie for authentication (supports API key for CLI tests)
         graphql_port = str(self._fragment_server["Port"])
         graphql_scheme = self._fragment_server["Scheme"]

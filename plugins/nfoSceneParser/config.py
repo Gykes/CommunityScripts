@@ -30,6 +30,10 @@ blacklist = ["rating"]
 # Example: blacklisted_tags = ["HD", "Now in HD"]
 blacklisted_tags = ["HD", "4K", "Now in HD", "1080p Video", "4k Video"]
 
+# Name of the tag used as 'marker" by the plugin to identify which scenes to reload.
+# Empty string or None disables the reload feature
+reload_tag = "_NFO_RELOAD"
+
 ###############################################################################
 # Do not change config below unless you are absolutely sure of what you do...
 ###############################################################################
