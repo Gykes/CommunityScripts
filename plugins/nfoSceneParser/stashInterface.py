@@ -94,10 +94,10 @@ class StashInterface:
                 self._path_rewrite[0], self._path_rewrite[1])
         return result.get("findScene")
 
-    def gql_findScenes(self):
+    def gql_findScenes(self, tag_id=None):
         query = """
-        query FindScenes($filter: FindFilterType) {
-            findScenes(filter: $filter) {
+        query FindScenes($scene_filter: SceneFilterType, $filter: FindFilterType) {
+            findScenes(scene_filter: $scene_filter, filter: $filter) {
                 count
                 scenes {
                     ...SlimSceneData
@@ -113,7 +113,22 @@ class StashInterface:
             }
         }
         """
-        variables = {'filter': {"direction": "ASC", "page": 1, "per_page": -1, "sort": "updated_at"}}
+        variables = {
+            "scene_filter": None,
+            "filter": {
+                "direction": "ASC",
+                "page": 1,
+                "per_page": -1,
+                "sort": "updated_at"
+            }
+        }
+        if tag_id:
+            variables["scene_filter"] = {
+                "tags": {
+                    "value": tag_id,
+                    "modifier": "INCLUDES"
+                }
+            }
         result = self.__gql_call(query, variables)
         return result.get("findScenes")
 
@@ -123,7 +138,7 @@ class StashInterface:
             sceneUpdate(input: $input) {
                 id
             }
-        }    
+        }
         """
         input_data = {
             "id": scene_id,
@@ -218,18 +233,19 @@ class StashInterface:
         }
         """
         # Use folder nfo data for some movie specific attributes (ignoring scene nfo specifics)
-        date = folder_data.get("date") or file_data["date"]
+        date = folder_data.get("date") or file_data["date"] or None
+        bl = config.blacklist
         variables = {
             "input": {
                 "name": file_data["movie"],
-                "studio_id": studio_id if "studio" not in config.blacklist else None,
-                "date": date if "date" not in config.blacklist else None,
-                "director": file_data["director"] if "director" not in config.blacklist else None,
-                "synopsis": folder_data.get("details") if "details" not in config.blacklist else None,
-                "rating": folder_data.get("rating") if "rating" not in config.blacklist else None,
-                "url": folder_data.get("url") if "url" not in config.blacklist else None,
-                "front_image": folder_data.get("cover_image") if "cover_image" not in config.blacklist else None,
-                "back_image": folder_data.get("other_image") if "cover_image" not in config.blacklist else None,
+                "studio_id": (studio_id or None) if "studio" not in bl else None,
+                "date": date if "date" not in bl else None,
+                "director": (file_data["director"] or None) if "director" not in bl else None,
+                "synopsis": (folder_data.get("details") or None) if "details" not in bl else None,
+                "rating": (folder_data.get("rating") or None) if "rating" not in bl else None,
+                "url": (folder_data.get("url") or None) if "url" not in bl else None,
+                "front_image": folder_data.get("cover_image") if "cover_image" not in bl else None,
+                "back_image": folder_data.get("other_image") if "cover_image" not in bl else None,
             }
         }
         result = self.__gql_call(query, variables)

@@ -2,13 +2,13 @@ import sys
 import json
 import config
 import log
+import re
 import nfoParser
 import reParser
 import stashInterface
 
 
 class NfoSceneParser:
-    '''stash plugin'''
 
     def __init__(self, stash):
         self._stash: stashInterface.StashInterface = stash
@@ -17,6 +17,8 @@ class NfoSceneParser:
         self._folder_data: dict = {}
         self._file_data: dict = {}
         self._reload_tag_id = None
+
+        # For reload mode, checks & preload ids matching marker tag config
         if self._stash.get_mode() == "reload" and config.reload_tag:
             reload_tag_found = False
             results = self._stash.gql_findTags(config.reload_tag)
@@ -26,7 +28,8 @@ class NfoSceneParser:
                     reload_tag_found = True
                     break
             if not reload_tag_found:
-                log.LogError("Reload cancelled: 'reload_tag' set in config.py is not found in stash.")
+                log.LogError(
+                    f"Reload cancelled: '{config.reload_tag}' do not exist in stash.")
                 self._stash.exit_plugin("Reload task cancelled!")
 
     def __prepare(self, scene_id):
@@ -35,16 +38,31 @@ class NfoSceneParser:
         self._folder_data = {}
         self._file_data = {}
 
+    def __substitute_file_data(self):
+        # Nothing to do if no config or actors...
+        if not config.performers_substitutions or not self._file_data.get("actors"):
+            return
+        # Substitute performers names according to config
+        index = 0
+        for actor in self._file_data.get("actors"):
+            for subst in config.performers_substitutions:
+                if subst[0].lower() in actor.lower():
+                    self._file_data.get("actors")[index] = actor.replace(subst[0], subst[1])
+                    break
+            index += 1
+
+    # Parses data from files. Supports nfo & regex
     def __parse(self):
-        ''' Parse data from files, from nfo or regex pattern matching on the filename itself '''
         if self._scene["organized"] and config.skip_organized:
             log.LogInfo(
                 f"Skipping already organized scene id: {self._scene['id']}")
             return
+
         # Parse folder nfo (used as default)
         folder_nfo_parser = nfoParser.NfoParser(
             self._scene["path"], None, True)
         self._folder_data = folder_nfo_parser.parse()
+
         # Parse scene nfo (nfo & regex).
         re_parser = reParser.RegExParser(self._scene["path"], [
             self._folder_data or reParser.RegExParser.empty_defaults
@@ -55,29 +73,33 @@ class NfoSceneParser:
             re_file_data or nfoParser.NfoParser.empty_defaults
         ])
         nfo_file_data = nfo_parser.parse()
+
         # nfo as preferred input. re as fallback
         self._file_data = nfo_file_data or re_file_data
+        self.__substitute_file_data()
         return self._file_data
 
     def __strip_b64(self, data):
         if data.get("cover_image"):
-            data["cover_image"] = "*** Base64 encoded image removed for readability ***"
+            data["cover_image"] = "*** Base64 image removed for readability ***"
         return json.dumps(data)
 
+    # Updates the parsed data into stash db (and creates what is missing)
     def __update(self):
-        ''' Update the parsed data into stash db (or create them if missing) '''
         # Must have found at least a "title" in the nfo or regex...
         if not self._file_data:
             log.LogDebug(
                 "Skipped or no matching NFO or RE found: nothing done...")
             return
+
         # Retrieve/create performers, studios, movies,...
         scene_data = self.__find_create_scene_data()
-        # [ ] Possible improvement: enrich nfo scene index from regex matched index ?
+
         if config.dry_mode:
             log.LogInfo(
                 f"Dry mode. Would have updated scene based on: {self.__strip_b64(scene_data)}")
             return scene_data
+
         # Update scene data from parsed info
         updated_scene = self._stash.gql_updateScene(self._scene_id, scene_data)
         if updated_scene is not None and updated_scene["id"] == str(self._scene_id):
@@ -90,14 +112,22 @@ class NfoSceneParser:
 
     def __find_create_scene_data(self):
         # Lookup and/or create satellite objects in stash database
-        file_performer_ids = [] if "performers" in config.blacklist else self.__find_create_performers()
-        file_tag_ids = [] if "tags" in config.blacklist else self.__find_create_tags()
-        file_studio_id = None if "studio" in config.blacklist else self.__find_create_studio()
-        file_movie_id = None if "movie" in config.blacklist else self.__find_create_movie(
-            file_studio_id)
+        file_performer_ids = []
+        file_tag_ids = []
+        file_studio_id = None
+        file_movie_id = None
+        if "performers" not in config.blacklist:
+            file_performer_ids = self.__find_create_performers()
+        if "tags" not in config.blacklist:
+            file_tag_ids = self.__find_create_tags()
+        if "studio" not in config.blacklist:
+            file_studio_id = self.__find_create_studio()
+        if "movie" not in config.blacklist:
+            file_movie_id = self.__find_create_movie(file_studio_id)
 
         # Existing scene satellite data
-        scene_studio_id = self._scene.get("studio").get("id") if self._scene.get("studio") else None
+        scene_studio_id = self._scene.get("studio").get(
+            "id") if self._scene.get("studio") else None
         scene_performer_ids = list(
             map(lambda p: p.get("id"), self._scene["performers"]))
         scene_tag_ids = list(map(lambda t: t.get("id"), self._scene["tags"]))
@@ -110,30 +140,28 @@ class NfoSceneParser:
             scene_movie_id = self._scene.get("movies")[0]["movie"]["id"]
             scene_movie_index = self._scene.get("movies")[0]["scene_index"]
 
-        # Build data for scene update:
-        #  - Either new values or None (current data not modified).
-        #  - performers and tags are combined (new + existing)
+        # Merges file data with the existing scene data (priority to the nfo/regex content)
+        bl = config.blacklist
         scene_data = {
             "source": self._file_data["source"],
-            "title": (self._file_data["title"] or self._scene["title"] or None) if "title" not in config.blacklist else None,
-            "details": (self._file_data["details"] or self._scene["details"] or None) if "details" not in config.blacklist else None,
-            "date": (self._file_data["date"] or self._scene["date"] or None) if "date" not in config.blacklist else None,
-            "rating": (self._file_data["rating"] or self._scene["rating"] or None) if "rating" not in config.blacklist else None,
-            "url": (self._file_data["url"] or self._scene["url"] or None) if "url" not in config.blacklist else None,
+            "title": (self._file_data["title"] or self._scene["title"] or None) if "title" not in bl else None,
+            "details": (self._file_data["details"] or self._scene["details"] or None) if "details" not in bl else None,
+            "date": (self._file_data["date"] or self._scene["date"] or None) if "date" not in bl else None,
+            "rating": (self._file_data["rating"] or self._scene["rating"] or None) if "rating" not in bl else None,
+            "url": (self._file_data["url"] or self._scene["url"] or None) if "url" not in bl else None,
             "studio_id": file_studio_id or scene_studio_id or None,
             "performer_ids": list(set(file_performer_ids + scene_performer_ids)),
             "tag_ids": list(set(file_tag_ids + scene_tag_ids)),
             "movie_id": file_movie_id or scene_movie_id or None,
             "scene_index": self._file_data["scene_index"] or scene_movie_index or None,
-            "cover_image": (self._file_data["cover_image"] or None) if "image" not in config.blacklist else None,
+            "cover_image": (self._file_data["cover_image"] or None) if "image" not in bl else None,
         }
         return scene_data
 
     def __is_matching(self, text1, text2):
-        # [ ] Possible improvement: levenshtein distance instead of exact match?
-        text1 = text1.lower() if text1 else text1
-        text2 = text2.lower() if text2 else text2
-        return text1 == text2
+        if not text1 or not text2:
+            return text1 == text2
+        return text1.lower() == text2.lower()
 
     def __find_create_performers(self):
         performer_ids = []
@@ -154,21 +182,24 @@ class NfoSceneParser:
                         match_direct = True
                     match_count += 1
             # 2nd pass for alias matches
-            if not matching_id and config.search_performer_aliases \
-                    and (config.ignore_single_name_performer_aliases is False or " " in actor):
+            if not matching_id and \
+                    config.search_performer_aliases and \
+                    (config.ignore_single_name_performer_aliases is False or " " in actor):
                 for performer in performers["performers"]:
                     if performer["aliases"]:
-                        for alias in performer["aliases"].split(", "):
+                        # Old stash performer model. Assume a few separators to split string...
+                        aliases = re.split(', |; |/ ', performer["aliases"])
+                        for alias in aliases:
                             if self.__is_matching(actor, alias):
                                 if not matching_id:
                                     matching_id = performer["id"]
                                     match_alias = True
                                 match_count += 1
-            # Create a new performer when it does not exist
             if not matching_id:
+                # Create a new performer when it does not exist
                 if not config.create_missing_performers or config.dry_mode:
                     log.LogInfo(
-                        f"'{actor}' performer creation prevented by config (dry_mode or create_missing_xxx)")
+                        f"'{actor}' performer creation prevented by config")
                 else:
                     new_performer = self._stash.gql_performerCreate(actor)
                     created_performers.append(actor)
@@ -187,7 +218,7 @@ class NfoSceneParser:
 
     def __find_create_studio(self) -> str:
         if not self._file_data["studio"]:
-            return ""
+            return
         studio_id = None
         studios = self._stash.gql_findStudios(self._file_data["studio"])
         match_direct = False
@@ -205,7 +236,7 @@ class NfoSceneParser:
         if not matching_id and config.search_studio_aliases:
             for studio in studios["studios"]:
                 if studio["aliases"]:
-                    for alias in studio["aliases"].split(", "):
+                    for alias in studio["aliases"]:
                         if self.__is_matching(self._file_data["studio"], alias):
                             if not matching_id:
                                 matching_id = studio["id"]
@@ -213,9 +244,9 @@ class NfoSceneParser:
                             match_count += 1
         # Create a new studio when it does not exist
         if not matching_id:
-            if not config.create_missing_studio or config.dry_mode:
+            if not config.create_missing_studios or config.dry_mode:
                 log.LogInfo(
-                    f"'{self._file_data['studio']}' studio creation prevented by config (dry_mode or create_missing_xxx)")
+                    f"'{self._file_data['studio']}' studio creation prevented by config")
             else:
                 new_studio = self._stash.gql_studioCreate(
                     self._file_data["studio"])
@@ -227,8 +258,9 @@ class NfoSceneParser:
             log.LogDebug(f"Matched existing studio '{self._file_data['studio']}' with id \
                 {matching_id} (direct: {match_direct}, alias: {match_alias}, match_count: {match_count})")
             if match_count > 1:
-                log.LogInfo("Linked scene with title '{}' to existing studio '{}' (id {}). Attention: {} matches were found. Check to de-duplicate...".format(
-                    self._file_data["title"], self._file_data["studio"], matching_id, match_count))
+                log.LogInfo(f"Linked scene with title '{self._file_data['title']}' to existing studio \
+                    '{self._file_data['studio']}' (id {matching_id}). \
+                        Attention: {match_count} matches were found. Check to de-duplicate...")
         return studio_id
 
     def __find_create_tags(self):
@@ -241,27 +273,47 @@ class NfoSceneParser:
                 continue
             # find stash tags
             tags = self._stash.gql_findTags(file_tag)
+            match_direct = False
+            match_alias = False
             matching_id = None
-            # Ensure direct name match
+            match_count = 0
+            # 1st pass for direct name matches
             for tag in tags["tags"]:
                 if self.__is_matching(file_tag, tag["name"]):
                     if not matching_id:
                         matching_id = tag["id"]
+                        match_direct = True
+                    match_count += 1
+            # 2nd pass for alias matches
+            if not matching_id and config.search_studio_aliases:
+                for tag in tags["tags"]:
+                    if tag["aliases"]:
+                        for alias in tag["aliases"]:
+                            if self.__is_matching(file_tag, alias):
+                                if not matching_id:
+                                    matching_id = tag["id"]
+                                    match_alias = True
+                                match_count += 1
             # Create a new tag when it does not exist
             if not matching_id:
                 if not config.create_missing_tags or config.dry_mode:
                     log.LogDebug(
-                        f"'{file_tag}' tag creation prevented by config (dry_mode or create_missing_xxx)")
+                        f"'{file_tag}' tag creation prevented by config")
                 else:
                     new_tag = self._stash.gql_tagCreate(file_tag)
                     created_tags.append(file_tag)
                     tag_ids.append(new_tag["id"])
             else:
                 tag_ids.append(matching_id)
-                log.LogDebug("Matched existing tag '{}' with id {}".format(
-                    file_tag, matching_id))
+                log.LogDebug(
+                    f"Matched existing tag '{file_tag}' with id {matching_id} \
+                        (direct: {match_direct}, alias: {match_alias}, match_count: {match_count})")
+                if match_count > 1:
+                    log.LogInfo(f"Linked scene with title '{self._file_data['title']}' to existing tag \
+                        '{file_tag}' (id {matching_id}). \
+                            Attention: {match_count} matches were found. Check to de-duplicate...")
         if created_tags:
-            log.LogInfo("Created missing tags '{}'".format(created_tags))
+            log.LogInfo(f"Created missing tags '{created_tags}'")
         return tag_ids
 
     def __find_create_movie(self, studio_id):
@@ -270,6 +322,7 @@ class NfoSceneParser:
         movie_id = None
         movies = self._stash.gql_findMovies(self._file_data["movie"])
         matching_id = None
+        # [ ] possible improvement: support movie aliases?
         # Ensure direct name match
         for movie in movies["movies"]:
             if self.__is_matching(self._file_data["movie"], movie["name"]):
@@ -277,20 +330,20 @@ class NfoSceneParser:
                     matching_id = movie["id"]
         # Create a new movie when it does not exist
         if not matching_id:
-            if not config.create_missing_movie or config.dry_mode:
+            if not config.create_missing_movies or config.dry_mode:
                 log.LogInfo(
-                    f"'{self._file_data['movie']}' movie creation prevented by config (dry_mode or create_missing_xxx)")
+                    f"'{self._file_data['movie']}' movie creation prevented by config")
             else:
                 new_movie = self._stash.gql_movieCreate(
                     self._file_data, studio_id, self._folder_data)
                 movie_id = new_movie["id"]
-                log.LogInfo("Created missing movie '{}' with id {}".format(
-                    self._file_data["movie"], new_movie["id"]))
+                log.LogInfo(
+                    f"Created missing movie '{self._file_data['movie']}' with id {new_movie['id']}")
         else:
             # [ ] Possible improvement: update existing movie with nfo data
             movie_id = matching_id
-            log.LogDebug("Matched existing movie '{}' with id {}".format(
-                self._file_data["movie"], matching_id))
+            log.LogDebug(
+                f"Matched existing movie '{self._file_data['movie']}' with id {matching_id}")
         return movie_id
 
     def __process_scene(self, scene_id):
@@ -299,32 +352,37 @@ class NfoSceneParser:
         try:
             scene_data = self.__update()
         except Exception as e:
-            log.LogError(f"Error updating stash for scene {scene_id}: {json.loads(e)}")
+            log.LogError(
+                f"Error updating stash for scene {scene_id}: {e}")
         return [file_data, scene_data]
 
     def __process_reload(self):
-        # Find all scenes in stash
-        scenes = self._stash.gql_findScenes()
-        log.LogDebug(f"Found {len(scenes['scenes'])} scenes in stash")
+        # Check if the required config was done
+        if not config.reload_tag:
+            log.LogInfo(
+                "Reload disabled: 'reload_tag' is empty in plugin's config.py")
+            return
+        # Find all scenes in stash with the reload marker tag
+        scenes = self._stash.gql_findScenes(self._reload_tag_id)
+        log.LogDebug(f"Found {len(scenes['scenes'])} scenes with the reload_tag in stash")
         scene_count = len(scenes["scenes"])
         reload_count = 0
         progress = 0
         progress_step = 1 / scene_count
-        # Check if the required config was done
-        if not config.reload_tag:
-            log.LogInfo("Reload disabled: 'reload_tag' is empty in plugin's config.py")
-            return
         reload_tag = config.reload_tag.lower()
+
         # Reloads only scenes marked with configured tags
         for scene in scenes["scenes"]:
             for tag in scene.get("tags"):
                 if tag.get("name").lower() == reload_tag:
-                    log.LogDebug(f"Scene {scene['id']} is tagged to be reloaded.")
+                    log.LogDebug(
+                        f"Scene {scene['id']} is tagged to be reloaded.")
                     self.__process_scene(scene["id"])
                     reload_count += 1
                     break
             progress += progress_step
             log.LogProgress(progress)
+
         # Inform if nothing was done
         if reload_count == 0:
             log.LogInfo(
@@ -336,7 +394,9 @@ class NfoSceneParser:
         elif self._stash.get_mode() == "reload":
             return self.__process_reload()
         else:
-            raise Exception(f"nfoSceneParser error: unsupported mode {self._stash.get_mode()}")
+            raise Exception(
+                f"nfoSceneParser error: unsupported mode {self._stash.get_mode()}")
+
 
 if __name__ == '__main__':
     # Init
@@ -345,8 +405,10 @@ if __name__ == '__main__':
         fragment = json.loads(sys.argv[1])
     else:
         fragment = json.loads(sys.stdin.read())
+
+    # Start processing: parse file data and update scenes
+    # (+ create missing performer, tag, movie,...)
     stash_interface = stashInterface.StashInterface(fragment)
-    # Parse file data and update scene (+ create missing performer, tag, movie,...)
     nfoSceneParser = NfoSceneParser(stash_interface)
     nfoSceneParser.process()
     stash_interface.exit_plugin("Successful!")

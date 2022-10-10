@@ -8,14 +8,9 @@ import log
 class RegExParser:
     ''' Parse filenames (with regex) '''
 
-    empty_defaults = { "actors": [], "tags": [] }
+    empty_defaults = {"actors": [], "tags": []}
 
     def __init__(self, scene_path, defaults=None):
-        ''' 
-        - defaults: List of previous parse() results that to use as default value
-            Defaults are used when no data is found in the current nfo (or there are no nfo).
-            Default are process in the order in the list. The first key match is used.
-        '''
         self._defaults = defaults or [self.empty_defaults]
         self._scene_path = scene_path
         self._re_config_file = self.__find_re_config(
@@ -26,10 +21,11 @@ class RegExParser:
         parent_dir = os.path.dirname(path)
         re_config_file = os.path.join(path, "nfoSceneParser.json")
         if os.path.exists(re_config_file):
-            # Found => load yaml config
             try:
+                # Found => load yaml config
                 with open(re_config_file, 'r') as f:
                     config = json.load(f)
+                # TODO: support stash patterns and build a regex out of it...
                 self._regex = config["regex"]
                 self._splitter = config.get("splitter")
                 self._scope = config.get("scope")
@@ -41,10 +37,11 @@ class RegExParser:
                 log.LogDebug(f"Using regex config file {re_config_file}")
                 return re_config_file
             except Exception as e:
-                log.LogInfo(f"Could not load regex config file '{re_config_file}': {e}")
+                log.LogInfo(
+                    f"Could not load regex config file '{re_config_file}': {e}")
                 return
         elif path != parent_dir:
-            # Not found => look in parent
+            # Not found => recurse via parent
             return self.__find_re_config(parent_dir)
         log.LogDebug("No re config found for {}".format(self._scene_path))
 
@@ -126,7 +123,8 @@ class RegExParser:
         matches = re.match(self._regex, self._name)
         self._groups = matches.groupdict() if matches else {}
         if not self._groups:
-            log.LogInfo(f"Regex found in {self._re_config_file}, is NOT matching '{self._name}'")
+            log.LogInfo(
+                f"Regex found in {self._re_config_file}, is NOT matching '{self._name}'")
         file_data = {
             "file": self._re_config_file,
             "source": "re",

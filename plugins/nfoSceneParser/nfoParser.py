@@ -2,6 +2,7 @@ import os
 import xml.etree.ElementTree as xml
 import base64
 import glob
+import json
 import re
 import requests
 import config
@@ -11,18 +12,12 @@ import log
 class NfoParser:
     ''' Parse nfo files '''
 
-    empty_defaults = { "actors": [], "tags": [] }
+    empty_defaults = {"actors": [], "tags": []}
 
     # Max number if images to process (2 for front/back cover in movies).
     _image_Max = 2
 
     def __init__(self, scene_path, defaults=None, folder_mode=False):
-        ''' 
-        - defaults: List of previous parse() results that to use as default value
-            Defaults are used when no data is found in the current nfo (or there are no nfo).
-            Default are process in the order in the list. The first key match is used.
-        - folder_mode: whether to look for a global folder.nfo file or a scepecif scenename.nfo.
-        '''
         self._defaults = defaults or [self.empty_defaults]
         # Finds nfo file
         nfo_path = None
@@ -82,7 +77,7 @@ class NfoParser:
                 thumb_images.append(img_bytes)
             except Exception as e:
                 log.LogDebug(
-                    "Failed to download the cover image from {}: {}".format(thumb_url, e))
+                    f"Failed to download the cover image from {thumb_url}: {e}")
         return thumb_images
 
     def __extract_cover_images_b64(self):
@@ -123,18 +118,21 @@ class NfoParser:
         # from nfo <tag>
         tags = self._nfo_root.findall("tag")
         for tag in tags:
-            file_tags.append(tag.text)
+            if tag.text:
+                file_tags.append(tag.text)
         # from nfo <genre>
         genres = self._nfo_root.findall("genre")
         for genre in genres:
-            file_tags.append(genre.text)
+            if genre.text:
+                file_tags.append(genre.text)
         return list(set(file_tags))
 
     def __extract_nfo_actors(self):
         file_actors = []
         actors = self._nfo_root.findall("actor/name")
         for actor in actors:
-            file_actors.append(actor.text)
+            if actor.text:
+                file_actors.append(actor.text)
         return file_actors
 
     def __get_default(self, key, source=None):
@@ -159,7 +157,8 @@ class NfoParser:
             clean_nfo_content = clean_nfo_content.replace("&nbsp;", " ")
             self._nfo_root = xml.fromstring(clean_nfo_content)
         except Exception as e:
-            log.LogError(f"Could not parse nfo '{self._nfo_file}': {e}")
+            log.LogError(
+                f"Could not parse nfo '{self._nfo_file}': {e}")
             return {}
         # Extract data from XML tree. Spec: https://kodi.wiki/view/NFO_files/Movies
         b64_images = self.__extract_cover_images_b64()
@@ -167,18 +166,20 @@ class NfoParser:
             # TODO: supports stash uniqueid to match to existing scenes (compatibility with nfo exporter)
             "file": self._nfo_file,
             "source": "nfo",
-            "title": self._nfo_root.findtext("title") or self._nfo_root.findtext("originaltitle") or self._nfo_root.findtext("sorttitle") or self.__get_default("title", "re"),
+            "title": self._nfo_root.findtext("title") or self._nfo_root.findtext("originaltitle") \
+            or self._nfo_root.findtext("sorttitle") or self.__get_default("title", "re"),
             "director": self._nfo_root.findtext("director") or self.__get_default("director"),
-            "details": self._nfo_root.findtext("plot") or self._nfo_root.findtext("outline") or self._nfo_root.findtext("tagline") or self.__get_default("details"),
+            "details": self._nfo_root.findtext("plot") or self._nfo_root.findtext("outline") \
+            or self._nfo_root.findtext("tagline") or self.__get_default("details"),
             "studio": self._nfo_root.findtext("studio") or self.__get_default("studio"),
             "date": self.__extract_nfo_date() or self.__get_default("date"),
             "actors": self.__extract_nfo_actors() or self.__get_default("actors"),
-            # tags are merged with defaults
+            # Tags are merged with defaults
             "tags": list(set(self.__extract_nfo_tags() + self.__get_default("tags"))),
             "rating": self.__extract_nfo_rating() or self.__get_default("rating"),
             "cover_image": None if len(b64_images) < 1 else b64_images[0],
             "other_image": None if len(b64_images) < 2 else b64_images[1],
-            # Below are NFO extensions or liberal tag interpretations (not part of the standard KODI tags)
+            # Below are NFO extensions or liberal tag interpretations (not part of the nfo spec)
             "movie": self._nfo_root.findtext("set/name") or self.__get_default("title", "nfo"),
             "scene_index": self._nfo_root.findtext("set/index"),
             "url": self._nfo_root.findtext("url"),

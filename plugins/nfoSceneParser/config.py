@@ -34,15 +34,15 @@ blacklisted_tags = ["HD", "4K", "Now in HD", "1080p Video", "4k Video"]
 # Empty string or None disables the reload feature
 reload_tag = "_NFO_RELOAD"
 
+# Creates missing entities in stash's database (or not)
+create_missing_performers = True
+create_missing_studios = True
+create_missing_tags = True
+create_missing_movies = True
+
 ###############################################################################
 # Do not change config below unless you are absolutely sure of what you do...
 ###############################################################################
-
-# Creates missing entities in stash's database (or not)
-create_missing_performers = True
-create_missing_studio = True
-create_missing_tags = True
-create_missing_movie = True
 
 # Wether to Looks for existing entries also in aliases
 search_performer_aliases = True
@@ -53,6 +53,15 @@ search_studio_aliases = True
 # => only the "main" performer name determines if a performer exists or is created.
 # Only relevant if search_performer_aliases is True.
 ignore_single_name_performer_aliases = True
+
+# To help manage single names and aliases, it can be useful to substitute
+# single names performers in the files to their "multi" name equivalent
+# single names performers in the files to their "multi" name equivalent
+performers_substitutions = [
+    ["LaSirena69", "La Sirena 69"],
+    ["MJFresh", "MJ Fresh"],
+    ["JMac", "J Mac"],
+]
 
 ###############################################################################
 # Reminder: if no matching NFO file can be found for the scene, a fallback 

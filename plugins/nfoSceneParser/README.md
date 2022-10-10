@@ -39,7 +39,7 @@ nfoFileParser typically processes everything during scan. If you want to reload 
 It works in three steps: configure, select & run:
 - Configure: edit `reload_tags` in the plugin's `config.py` file. Set the name to an existing tag in your stash. It is used as the 'marker" tag by the plugin to identify which scenes to reload.
 - Select: add the configured tag to your scenes to "mark" them.
-- Run: execute the "reload" task (stash's settings -> "plugin tasks" -> nfoSceneParser -> "Reload tagged scenes" button)
+- Run: execute the "reload" task: stash's settings -> "Tasks" -> Scroll down to "plugin tasks" / nfoSceneParser (at the bottom) -> "Reload tagged scenes" button
 
 A reload essentially merges the new file data with the existing scene data, giving priority to the nfo/regex content. More specifically:
 - For single-value fields, overrides what is already set if another content is found 
