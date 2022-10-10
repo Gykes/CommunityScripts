@@ -10,7 +10,6 @@ import log
 
 
 class NfoParser:
-    ''' Parse nfo files '''
 
     empty_defaults = {"actors": [], "tags": []}
 
@@ -181,7 +180,7 @@ class NfoParser:
             "other_image": None if len(b64_images) < 2 else b64_images[1],
             # Below are NFO extensions or liberal tag interpretations (not part of the nfo spec)
             "movie": self._nfo_root.findtext("set/name") or self.__get_default("title", "nfo"),
-            "scene_index": self._nfo_root.findtext("set/index"),
-            "url": self._nfo_root.findtext("url"),
+            "scene_index": self._nfo_root.findtext("set/index") or None,
+            "url": self._nfo_root.findtext("url") or None,
         }
         return file_data
