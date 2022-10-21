@@ -340,28 +340,30 @@ class StashInterface:
         result = self.__gql_call(query, variables)
         return result.get("findMovies")
 
-    def gql_findTags(self, name):
+    def gql_findTags(self, name=None):
         query = """
         query findTags($tag_filter: TagFilterType, $filter: FindFilterType) {
             findTags(tag_filter: $tag_filter, filter: $filter) {
                 tags {
                     id
                     name
+                    aliases
                 }
             }
         }
         """
         variables = {
-            "tag_filter": {
-                "name": {
-                    "value": name,
-                    "modifier": "INCLUDES"
-                }
-            },
             "filter": {
                 "per_page": -1
             },
         }
+        if name:
+            variables["tag_filter"] =  {
+                "name": {
+                    "value": name,
+                    "modifier": "INCLUDES"
+                }
+            }
         result = self.__gql_call(query, variables)
         return result.get("findTags")
 
@@ -402,7 +404,7 @@ class StashInterface:
             response = requests.post(
                 graphql_url, json=graphql_json, headers=graphql_headers, cookies=graphql_cookies, timeout=20)
         except Exception as e:
-            self.exit_plugin(err=f"[FATAL] Error with the graphql request {e}")
+            self.exit_plugin(err=f"[FATAL] Error with the graphql request {repr(e)}")
         if response.status_code == 200:
             result = response.json()
             if result.get("errors"):

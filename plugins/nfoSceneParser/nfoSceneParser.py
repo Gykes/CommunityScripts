@@ -1,17 +1,20 @@
+from math import log10
 import sys
 import json
+import difflib
 import config
 import log
 import re
-import nfoParser
-import reParser
-import stashInterface
+from abstractParser import AbstractParser
+from nfoParser import NfoParser
+from reParser import RegExParser
+from stashInterface import StashInterface
 
 
 class NfoSceneParser:
 
     def __init__(self, stash):
-        self._stash: stashInterface.StashInterface = stash
+        self._stash: StashInterface = stash
         self._scene_id: str = None
         self._scene: dict = None
         self._folder_data: dict = {}
@@ -38,18 +41,19 @@ class NfoSceneParser:
         self._folder_data = {}
         self._file_data = {}
 
-    def __substitute_file_data(self):
-        # Nothing to do if no config or actors...
-        if not config.performers_substitutions or not self._file_data.get("actors"):
-            return
-        # Substitute performers names according to config
-        index = 0
-        for actor in self._file_data.get("actors"):
-            for subst in config.performers_substitutions:
-                if subst[0].lower() in actor.lower():
-                    self._file_data.get("actors")[index] = actor.replace(subst[0], subst[1])
-                    break
-            index += 1
+    # def __substitute_file_data(self):
+    #     # Nothing to do if no config or actors...
+    #     if not config.performers_substitutions or not self._file_data.get("actors"):
+    #         return
+    #     # Substitute performers names according to config
+    #     index = 0
+    #     for actor in self._file_data.get("actors"):
+    #         for subst in config.performers_substitutions:
+    #             if subst[0].lower() in actor.lower():
+    #                 self._file_data.get("actors")[index] = actor.replace(
+    #                     subst[0], subst[1])
+    #                 break
+    #         index += 1
 
     # Parses data from files. Supports nfo & regex
     def __parse(self):
@@ -59,24 +63,23 @@ class NfoSceneParser:
             return
 
         # Parse folder nfo (used as default)
-        folder_nfo_parser = nfoParser.NfoParser(
-            self._scene["path"], None, True)
+        folder_nfo_parser = NfoParser(self._scene["path"], None, True)
         self._folder_data = folder_nfo_parser.parse()
 
         # Parse scene nfo (nfo & regex).
-        re_parser = reParser.RegExParser(self._scene["path"], [
-            self._folder_data or reParser.RegExParser.empty_defaults
+        re_parser = RegExParser(self._scene["path"], [
+            self._folder_data or AbstractParser.empty_default
         ])
         re_file_data = re_parser.parse()
-        nfo_parser = nfoParser.NfoParser(self._scene["path"], [
-            self._folder_data or nfoParser.NfoParser.empty_defaults,
-            re_file_data or nfoParser.NfoParser.empty_defaults
+        nfo_parser = NfoParser(self._scene["path"], [
+            self._folder_data or AbstractParser.empty_default,
+            re_file_data or AbstractParser.empty_default
         ])
         nfo_file_data = nfo_parser.parse()
 
         # nfo as preferred input. re as fallback
         self._file_data = nfo_file_data or re_file_data
-        self.__substitute_file_data()
+        # self.__substitute_file_data()
         return self._file_data
 
     def __strip_b64(self, data):
@@ -113,17 +116,16 @@ class NfoSceneParser:
     def __find_create_scene_data(self):
         # Lookup and/or create satellite objects in stash database
         file_performer_ids = []
-        file_tag_ids = []
         file_studio_id = None
         file_movie_id = None
         if "performers" not in config.blacklist:
             file_performer_ids = self.__find_create_performers()
-        if "tags" not in config.blacklist:
-            file_tag_ids = self.__find_create_tags()
         if "studio" not in config.blacklist:
             file_studio_id = self.__find_create_studio()
         if "movie" not in config.blacklist:
             file_movie_id = self.__find_create_movie(file_studio_id)
+        # "tags" blacklist applied inside func (blacklist create, allow find):
+        file_tag_ids = self.__find_create_tags()
 
         # Existing scene satellite data
         scene_studio_id = self._scene.get("studio").get(
@@ -158,10 +160,29 @@ class NfoSceneParser:
         }
         return scene_data
 
-    def __is_matching(self, text1, text2):
+    def levenshtein_distance(self, str1, str2, ):
+        counter = {"+": 0, "-": 0}
+        distance = 0
+        for edit_code, *_ in difflib.ndiff(str1, str2):
+            if edit_code == " ":
+                distance += max(counter.values())
+                counter = {"+": 0, "-": 0}
+            else:
+                counter[edit_code] += 1
+        distance += max(counter.values())
+        return distance
+
+    def __is_matching(self, text1, text2, tolerance=False):
         if not text1 or not text2:
             return text1 == text2
-        return text1.lower() == text2.lower()
+        if tolerance:
+            distance = self.levenshtein_distance(text1.lower(), text2.lower())
+            match = distance < (config.levenshtein_distance_tolerance * log10(len(text1)))
+            if match and distance:
+                log.LogDebug(f"Matched with distance {distance}: '{text1}' with '{text2}'")
+            return match
+        else:
+            return text1.lower() == text2.lower()
 
     def __find_create_performers(self):
         performer_ids = []
@@ -173,6 +194,7 @@ class NfoSceneParser:
             match_direct = False
             match_alias = False
             matching_id = None
+            matching_name = None
             match_count = 0
             # 1st pass for direct name matches
             for performer in performers["performers"]:
@@ -181,20 +203,26 @@ class NfoSceneParser:
                         matching_id = performer["id"]
                         match_direct = True
                     match_count += 1
+            # log.LogDebug(
+            #     f"Direct '{actor}' performer search: matching_id: {matching_id}, match_count: {match_count}")
             # 2nd pass for alias matches
             if not matching_id and \
                     config.search_performer_aliases and \
-                    (config.ignore_single_name_performer_aliases is False or " " in actor):
+                    (not config.ignore_single_name_performer_aliases or " " in actor or actor in config.single_name_whitelist):
                 for performer in performers["performers"]:
                     if performer["aliases"]:
-                        # Old stash performer model. Assume a few separators to split string...
-                        aliases = re.split(', |; |/ ', performer["aliases"])
+                        # Old stash performer model. Assume a few separators to split the aliases string...
+                        aliases = re.split(',|;|/', performer["aliases"])
+                        aliases = list(map(lambda a: a.strip(), aliases))
                         for alias in aliases:
                             if self.__is_matching(actor, alias):
                                 if not matching_id:
                                     matching_id = performer["id"]
+                                    matching_name = performer["name"]
                                     match_alias = True
                                 match_count += 1
+                # log.LogDebug(
+                #     f"Aliases '{actor}' performer search: matching_id: {matching_id}, matching_name: {matching_name}, match_count: {match_count}")
             if not matching_id:
                 # Create a new performer when it does not exist
                 if not config.create_missing_performers or config.dry_mode:
@@ -206,7 +234,8 @@ class NfoSceneParser:
                     performer_ids.append(new_performer["id"])
             else:
                 performer_ids.append(matching_id)
-                log.LogDebug(f"Matched existing performer '{actor}' with id {matching_id} \
+                log.LogDebug(f"Matched existing performer '{actor}' with \
+                    id {matching_id} name {matching_name or actor} \
                     (direct: {match_direct}, alias: {match_alias}, match_count: {match_count})")
                 if match_count > 1:
                     log.LogInfo(f"Linked scene with title '{self._file_data['title']}' to existing \
@@ -267,36 +296,36 @@ class NfoSceneParser:
         tag_ids = []
         created_tags = []
         blacklisted_tags = [tag.lower() for tag in config.blacklisted_tags]
+        # find all stash tags
+        all_tags = self._stash.gql_findTags()
         for file_tag in self._file_data["tags"]:
             # skip empty or blacklisted tags
             if not file_tag or file_tag.lower() in blacklisted_tags:
                 continue
-            # find stash tags
-            tags = self._stash.gql_findTags(file_tag)
             match_direct = False
             match_alias = False
             matching_id = None
             match_count = 0
             # 1st pass for direct name matches
-            for tag in tags["tags"]:
-                if self.__is_matching(file_tag, tag["name"]):
+            for tag in all_tags["tags"]:
+                if self.__is_matching(file_tag, tag["name"], True):
                     if not matching_id:
                         matching_id = tag["id"]
                         match_direct = True
                     match_count += 1
             # 2nd pass for alias matches
             if not matching_id and config.search_studio_aliases:
-                for tag in tags["tags"]:
+                for tag in all_tags["tags"]:
                     if tag["aliases"]:
                         for alias in tag["aliases"]:
-                            if self.__is_matching(file_tag, alias):
+                            if self.__is_matching(file_tag, alias, True):
                                 if not matching_id:
                                     matching_id = tag["id"]
                                     match_alias = True
                                 match_count += 1
             # Create a new tag when it does not exist
             if not matching_id:
-                if not config.create_missing_tags or config.dry_mode:
+                if not config.create_missing_tags or config.dry_mode or "tags" in config.blacklist:
                     log.LogDebug(
                         f"'{file_tag}' tag creation prevented by config")
                 else:
@@ -353,7 +382,8 @@ class NfoSceneParser:
             scene_data = self.__update()
         except Exception as e:
             log.LogError(
-                f"Error updating stash for scene {scene_id}: {e}")
+                f"Error updating stash for scene {scene_id}: {repr(e)}")
+            scene_data = None
         return [file_data, scene_data]
 
     def __process_reload(self):
@@ -364,8 +394,12 @@ class NfoSceneParser:
             return
         # Find all scenes in stash with the reload marker tag
         scenes = self._stash.gql_findScenes(self._reload_tag_id)
-        log.LogDebug(f"Found {len(scenes['scenes'])} scenes with the reload_tag in stash")
+        log.LogDebug(
+            f"Found {len(scenes['scenes'])} scenes with the reload_tag in stash")
         scene_count = len(scenes["scenes"])
+        if not scene_count:
+            log.LogInfo("No scenes found with the 'reload_tag' tag")
+            return
         reload_count = 0
         progress = 0
         progress_step = 1 / scene_count
@@ -408,7 +442,7 @@ if __name__ == '__main__':
 
     # Start processing: parse file data and update scenes
     # (+ create missing performer, tag, movie,...)
-    stash_interface = stashInterface.StashInterface(fragment)
+    stash_interface = StashInterface(fragment)
     nfoSceneParser = NfoSceneParser(stash_interface)
     nfoSceneParser.process()
     stash_interface.exit_plugin("Successful!")

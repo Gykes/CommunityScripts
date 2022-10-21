@@ -3,27 +3,22 @@ import re
 import json
 from datetime import datetime
 import log
+from abstractParser import AbstractParser
 
 
-class RegExParser:
-    ''' Parse filenames (with regex) '''
-
-    empty_defaults = {"actors": [], "tags": []}
+class RegExParser(AbstractParser):
 
     def __init__(self, scene_path, defaults=None):
-        self._defaults = defaults or [self.empty_defaults]
+        self._defaults = defaults or [self.empty_default]
         self._scene_path = scene_path
-        self._re_config_file = self.__find_re_config(
-            os.path.dirname(scene_path))
+        self._re_config_file = self._find_in_parents(
+            os.path.dirname(scene_path),
+            "nfoSceneParser.json")
         self._groups = {}
-
-    def __find_re_config(self, path):
-        parent_dir = os.path.dirname(path)
-        re_config_file = os.path.join(path, "nfoSceneParser.json")
-        if os.path.exists(re_config_file):
+        if self._re_config_file:
             try:
-                # Found => load yaml config
-                with open(re_config_file, 'r') as f:
+                # Config found => load it
+                with open(self._re_config_file, 'r') as f:
                     config = json.load(f)
                 # TODO: support stash patterns and build a regex out of it...
                 self._regex = config["regex"]
@@ -34,16 +29,12 @@ class RegExParser:
                     self._name = os.path.split(self._scene_path)[1]
                 else:
                     self._name = self._scene_path
-                log.LogDebug(f"Using regex config file {re_config_file}")
-                return re_config_file
+                log.LogDebug(f"Using regex config file {self._re_config_file}")
             except Exception as e:
                 log.LogInfo(
-                    f"Could not load regex config file '{re_config_file}': {e}")
-                return
-        elif path != parent_dir:
-            # Not found => recurse via parent
-            return self.__find_re_config(parent_dir)
-        log.LogDebug("No re config found for {}".format(self._scene_path))
+                    f"Could not load regex config file '{self._re_config_file}': {repr(e)}")
+        else:
+            log.LogDebug(f"No re config found for {self._scene_path}")
 
     def __format_date(self, re_findall, date_format):
         date_text = "-".join(re_findall[0] if re_findall else ())
@@ -90,8 +81,11 @@ class RegExParser:
         file_actors = []
         if self._groups.get("performers"):
             if self._splitter is not None:
-                file_actors = self._groups.get(
-                    "performers").split(self._splitter)
+                # re split supports multiple delimiters patterns.
+                actors = re.split(
+                    self._splitter, self._groups.get("performers"))
+                # strip() accommodates any number of spaces before/after each delimiter...
+                file_actors = list(map(lambda a: a.strip(), actors))
             else:
                 file_actors = [self._groups.get("performers")]
         return file_actors
@@ -111,14 +105,10 @@ class RegExParser:
             return rating
         return 0
 
-    def __get_default(self, key):
-        for default in self._defaults:
-            if default.get(key) is not None:
-                return default.get(key)
-
     def parse(self):
         if not self._re_config_file:
             return {}
+        log.LogDebug(f"Parsing with {self._regex}")
         # Match the regex against the file name
         matches = re.match(self._regex, self._name)
         self._groups = matches.groupdict() if matches else {}
@@ -129,16 +119,16 @@ class RegExParser:
             "file": self._re_config_file,
             "source": "re",
             "title": self._groups.get("title"),
-            "director": self._groups.get("director") or self.__get_default("director"),
-            "details": self.__get_default("details"),
-            "studio": self._groups.get("studio") or self.__get_default("studio"),
-            "movie": self._groups.get("movie") or self.__get_default("title"),
-            "scene_index": self._groups.get("index") or self.__get_default("scene_index"),
-            "date": self.__extract_re_date() or self.__get_default("date"),
-            "actors": self.__extract_re_actors() or self.__get_default("actors"),
+            "director": self._groups.get("director") or self._get_default("director"),
+            "details": self._get_default("details"),
+            "studio": self._groups.get("studio") or self._get_default("studio"),
+            "movie": self._groups.get("movie") or self._get_default("title"),
+            "scene_index": self._groups.get("index") or self._get_default("scene_index"),
+            "date": self.__extract_re_date() or self._get_default("date"),
+            "actors": self.__extract_re_actors() or self._get_default("actors"),
             # tags are merged with defaults
-            "tags": list(set(self.__extract_re_tags() + self.__get_default("tags"))),
-            "rating": self.__extract_re_rating() or self.__get_default("rating"),
+            "tags": list(set(self.__extract_re_tags() + self._get_default("tags"))),
+            "rating": self.__extract_re_rating() or self._get_default("rating"),
             "cover_image": None,
             "other_image": None,
             "url": None,

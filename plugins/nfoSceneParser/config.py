@@ -24,6 +24,7 @@ set_organized_only_if = ["title", "performers", "details", "date", "studio", "ta
 # Blacklist: array of nfo fields that will not be loaded into the scene.
 # Possible values: "performers", "studio", "tags", "movie", "title", "details", "date", 
 #                  "rating", "url" and "cover_image", "director"
+# Note: "tags" is a special case: if blacklisted, new tags will not be created, but existing tags will be mapped.
 blacklist = ["rating"]
 
 # List of tags that will never be created or set to the scene.
@@ -48,20 +49,16 @@ create_missing_movies = True
 search_performer_aliases = True
 search_studio_aliases = True
 
+levenshtein_distance_tolerance = 2
+
 # "Single names" means performers with only one word as name like "Anna" or "Siri".
 # If true, single names aliases will be ignored: 
 # => only the "main" performer name determines if a performer exists or is created.
 # Only relevant if search_performer_aliases is True.
 ignore_single_name_performer_aliases = True
 
-# To help manage single names and aliases, it can be useful to substitute
-# single names performers in the files to their "multi" name equivalent
-# single names performers in the files to their "multi" name equivalent
-performers_substitutions = [
-    ["LaSirena69", "La Sirena 69"],
-    ["MJFresh", "MJ Fresh"],
-    ["JMac", "J Mac"],
-]
+# If the above is set to true, it can be overruled for some allowed (whitelisted) names
+single_name_whitelist = ["MJFresh", "JMac", "Mazee"]
 
 ###############################################################################
 # Reminder: if no matching NFO file can be found for the scene, a fallback 
