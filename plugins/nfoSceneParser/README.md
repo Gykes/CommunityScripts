@@ -7,6 +7,7 @@ Ideal to "initial load" a large set of new files (or even a whole library) and n
 
 # Installation
 
+- If you have not done it yet, install the required python module: `pip install requests` (or `pip3 install requests` depending on your python setup). Note: if you are running stash as a Docker container, this is not needed as it is already installed.
 - Download the whole folder `nfoFileParser`
 - Place it in your `plugins` folder (where the `config.yml` is)
 - Reload plugins (`Settings > Plugins > Reload`)
