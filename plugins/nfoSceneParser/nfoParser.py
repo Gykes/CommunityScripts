@@ -27,24 +27,35 @@ class NfoParser(AbstractParser):
             # TODO: support dedicated dir instead of "with files" (compatibility with nfo exporters)
         self._nfo_root = None
 
-    def __read_cover_image_file(self):
+    def __match_image_files(self, files, pattern):
         thumb_images = []
-        path_no_ext = os.path.splitext(self._nfo_file)[0]
-        file_no_ext = os.path.split(path_no_ext)[1]
-        files = sorted(glob.glob(f"{path_no_ext}*.*"))
-        file_pattern = re.compile("^.*" + re.escape(file_no_ext) + \
-            "(-landscape\\d{0,2}|-thumb\\d{0,2}|-poster\\d{0,2}|-cover\\d{0,2}|\\d{0,2})\\.(jpe?g|png|webp)$", \
-            re.I)
         index = 0
         for file in files:
             if index >= self._image_Max:
                 break
-            if file_pattern.match(file):
+            if pattern.match(file):
                 with open(file, "rb") as img:
                     img_bytes = img.read()
                 thumb_images.append(img_bytes)
                 index += 1
         return thumb_images
+
+    def __read_cover_image_file(self):
+        path_no_ext = os.path.splitext(self._nfo_file)[0]
+        file_no_ext = os.path.split(path_no_ext)[1]
+        # First look for images for a given scene name...
+        files = sorted(glob.glob(f"{path_no_ext}*.*"))
+        file_pattern = re.compile("^.*" + re.escape(file_no_ext) + \
+            "(-landscape\\d{0,2}|-thumb\\d{0,2}|-poster\\d{0,2}|-cover\\d{0,2}|\\d{0,2})\\.(jpe?g|png|webp)$", re.I)
+        result = self.__match_image_files(files, file_pattern)
+        if result:
+            return result
+        # Not found? Look tor folder image...
+        path_dir = os.path.dirname(self._nfo_file)
+        folder_files = sorted(glob.glob(f"{path_dir}{os.path.sep}*.*"))
+        folder_pattern = re.compile("^.*(landscape\\d{0,2}|thumb\\d{0,2}|poster\\d{0,2}|cover\\d{0,2})\\.(jpe?g|png|webp)$", re.I)
+        result = self.__match_image_files(folder_files, folder_pattern)
+        return result
 
     def ___find_thumb_urls(self, query):
         result = []
