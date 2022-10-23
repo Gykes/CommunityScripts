@@ -18,7 +18,7 @@ class RegExParser(AbstractParser):
         if self._re_config_file:
             try:
                 # Config found => load it
-                with open(self._re_config_file, 'r') as f:
+                with open(self._re_config_file, mode="r", encoding="utf-8") as f:
                     config = json.load(f)
                 # TODO: support stash patterns and build a regex out of it...
                 self._regex = config["regex"]

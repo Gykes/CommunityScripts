@@ -147,7 +147,7 @@ class NfoParser(AbstractParser):
         log.LogDebug("Parsing '{}'".format(self._nfo_file))
         # Parse NFO xml content
         try:
-            with open(self._nfo_file, "r") as nfo:
+            with open(self._nfo_file, mode="r", encoding="utf-8") as nfo:
                 # Tolerance: strip non-standard whitespaces/new lines
                 clean_nfo_content = nfo.read().strip()
             # Tolerance: replace illegal "&nbsp;"
