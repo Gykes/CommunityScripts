@@ -44,7 +44,7 @@ class NfoParser(AbstractParser):
         path_no_ext = os.path.splitext(self._nfo_file)[0]
         file_no_ext = os.path.split(path_no_ext)[1]
         # First look for images for a given scene name...
-        files = sorted(glob.glob(f"{path_no_ext}*.*"))
+        files = sorted(glob.glob(f"{glob.escape(path_no_ext)}*.*"))
         file_pattern = re.compile("^.*" + re.escape(file_no_ext) + \
             "(-landscape\\d{0,2}|-thumb\\d{0,2}|-poster\\d{0,2}|-cover\\d{0,2}|\\d{0,2})\\.(jpe?g|png|webp)$", re.I)
         result = self.__match_image_files(files, file_pattern)
@@ -52,7 +52,7 @@ class NfoParser(AbstractParser):
             return result
         # Not found? Look tor folder image...
         path_dir = os.path.dirname(self._nfo_file)
-        folder_files = sorted(glob.glob(f"{path_dir}{os.path.sep}*.*"))
+        folder_files = sorted(glob.glob(f"{glob.escape(path_dir)}{os.path.sep}*.*"))
         folder_pattern = re.compile("^.*(landscape\\d{0,2}|thumb\\d{0,2}|poster\\d{0,2}|cover\\d{0,2})\\.(jpe?g|png|webp)$", re.I)
         result = self.__match_image_files(folder_files, folder_pattern)
         return result
