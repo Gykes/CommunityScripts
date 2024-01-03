@@ -131,6 +131,6 @@ class RegExParser(AbstractParser):
             "rating": self.__extract_re_rating() or self._get_default("rating"),
             "cover_image": None,
             "other_image": None,
-            "url": None,
+            "urls": None,
         }
         return file_data

@@ -41,11 +41,13 @@ class StashInterface:
             id
             title
             details
-            url
+            urls
             date
-            rating
+            rating: rating100
             organized
-            path
+            files {
+                path
+            }
             studio {
                 ...SlimStudioData
             }
@@ -90,7 +92,7 @@ class StashInterface:
         result = self.__gql_call(query, variables)
         # Path rewriting used for testing only
         if (self._path_rewrite is not None):
-            result["findScene"]["path"] = result["findScene"]["path"].replace(
+            result["findScene"]["files"][0]["path"] = result["findScene"]["files"][0]["path"].replace(
                 self._path_rewrite[0], self._path_rewrite[1])
         return result.get("findScene")
 
@@ -145,8 +147,8 @@ class StashInterface:
             "title": scene_data["title"],
             "details": scene_data["details"],
             "date": scene_data["date"],
-            "rating": scene_data["rating"],
-            "url": scene_data["url"],
+            "rating100": scene_data["rating"],
+            "urls": scene_data["urls"],
             "studio_id": scene_data["studio_id"],
             "performer_ids": scene_data["performer_ids"],
             "tag_ids": scene_data["tag_ids"],
@@ -242,8 +244,9 @@ class StashInterface:
                 "date": date if "date" not in bl else None,
                 "director": (file_data["director"] or None) if "director" not in bl else None,
                 "synopsis": (folder_data.get("details") or None) if "details" not in bl else None,
-                "rating": (folder_data.get("rating") or None) if "rating" not in bl else None,
-                "url": (folder_data.get("url") or None) if "url" not in bl else None,
+                "rating100": (folder_data.get("rating") or None) if "rating" not in bl else None,
+                # Take 1st folder NFO URL for movie
+                "url": (folder_data.get("urls")[0] or None) if "urls" not in bl else None,
                 "front_image": folder_data.get("cover_image") if "cover_image" not in bl else None,
                 "back_image": folder_data.get("other_image") if "cover_image" not in bl else None,
             }
@@ -258,7 +261,7 @@ class StashInterface:
                 performers {
                     id
                     name
-                    aliases
+                    alias_list
                 }
             }
         }

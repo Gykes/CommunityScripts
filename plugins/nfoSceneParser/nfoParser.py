@@ -109,7 +109,8 @@ class NfoParser(AbstractParser):
         if rating_elem is not None:
             max_value = float(rating_elem.attrib["max"] or 1)
             value = float(rating_elem.findtext("value") or 0)
-            rating = round(value / (max_value / 5))
+            # ratings on scale 100 (since stashapp v24)
+            rating = round(value / max_value * 100)
         return rating
 
     def __extract_nfo_date(self):
@@ -179,6 +180,7 @@ class NfoParser(AbstractParser):
             # Below are NFO extensions or liberal tag interpretations (not part of the nfo spec)
             "movie": self._nfo_root.findtext("set/name") or self._get_default("title", "nfo"),
             "scene_index": self._nfo_root.findtext("set/index") or None,
-            "url": self._nfo_root.findtext("url") or None,
+            # TODO: read multiple URL tags into array
+            "urls": None if not self._nfo_root.findtext("url") else [self._nfo_root.findtext("url")],
         }
         return file_data

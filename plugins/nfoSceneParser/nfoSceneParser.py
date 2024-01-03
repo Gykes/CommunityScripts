@@ -63,15 +63,16 @@ class NfoSceneParser:
             return
 
         # Parse folder nfo (used as default)
-        folder_nfo_parser = NfoParser(self._scene["path"], None, True)
+        # TODO: Manage file path array.
+        folder_nfo_parser = NfoParser(self._scene["files"][0]["path"], None, True)
         self._folder_data = folder_nfo_parser.parse()
 
         # Parse scene nfo (nfo & regex).
-        re_parser = RegExParser(self._scene["path"], [
+        re_parser = RegExParser(self._scene["files"][0]["path"], [
             self._folder_data or AbstractParser.empty_default
         ])
         re_file_data = re_parser.parse()
-        nfo_parser = NfoParser(self._scene["path"], [
+        nfo_parser = NfoParser(self._scene["files"][0]["path"], [
             self._folder_data or AbstractParser.empty_default,
             re_file_data or AbstractParser.empty_default
         ])
@@ -150,7 +151,8 @@ class NfoSceneParser:
             "details": (self._file_data["details"] or self._scene["details"] or None) if "details" not in bl else None,
             "date": (self._file_data["date"] or self._scene["date"] or None) if "date" not in bl else None,
             "rating": (self._file_data["rating"] or self._scene["rating"] or None) if "rating" not in bl else None,
-            "url": (self._file_data["url"] or self._scene["url"] or None) if "url" not in bl else None,
+            # TODO: scene URL is now an array
+            "urls": (self._file_data["urls"] or self._scene["urls"] or None) if "urls" not in bl else None,
             "studio_id": file_studio_id or scene_studio_id or None,
             "performer_ids": list(set(file_performer_ids + scene_performer_ids)),
             "tag_ids": list(set(file_tag_ids + scene_tag_ids)),

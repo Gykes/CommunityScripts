@@ -18,12 +18,12 @@ set_organized_nfo = True
 
 # Set of fields that must be set from the nfo (i.e. "not be empty") for the scene to be marked organized. 
 # Possible values: "performers", "studio", "tags", "movie", "title", "details", "date", 
-#                  "rating", "url" and "cover_image"
+#                  "rating", "urls" and "cover_image"
 set_organized_only_if = ["title", "performers", "details", "date", "studio", "tags", "cover_image"]
 
 # Blacklist: array of nfo fields that will not be loaded into the scene.
 # Possible values: "performers", "studio", "tags", "movie", "title", "details", "date", 
-#                  "rating", "url" and "cover_image", "director"
+#                  "rating", "urls" and "cover_image", "director"
 # Note: "tags" is a special case: if blacklisted, new tags will not be created, but existing tags will be mapped.
 blacklist = ["rating"]
 
