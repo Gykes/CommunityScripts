@@ -212,17 +212,13 @@ class NfoSceneParser:
                     config.search_performer_aliases and \
                     (not config.ignore_single_name_performer_aliases or " " in actor or actor in config.single_name_whitelist):
                 for performer in performers["performers"]:
-                    if performer["aliases"]:
-                        # Old stash performer model. Assume a few separators to split the aliases string...
-                        aliases = re.split(',|;|/', performer["aliases"])
-                        aliases = list(map(lambda a: a.strip(), aliases))
-                        for alias in aliases:
-                            if self.__is_matching(actor, alias):
-                                if not matching_id:
-                                    matching_id = performer["id"]
-                                    matching_name = performer["name"]
-                                    match_alias = True
-                                match_count += 1
+                    for alias in performer["alias_list"]:
+                        if self.__is_matching(actor, alias):
+                            if not matching_id:
+                                matching_id = performer["id"]
+                                matching_name = performer["name"]
+                                match_alias = True
+                            match_count += 1
                 # log.LogDebug(
                 #     f"Aliases '{actor}' performer search: matching_id: {matching_id}, matching_name: {matching_name}, match_count: {match_count}")
             if not matching_id:
