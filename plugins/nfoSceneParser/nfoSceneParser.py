@@ -154,6 +154,7 @@ class NfoSceneParser:
             # TODO: scene URL is now an array
             "urls": (self._file_data["urls"] or self._scene["urls"] or None) if "urls" not in bl else None,
             "studio_id": file_studio_id or scene_studio_id or None,
+            "code": self._file_data["uniqueid"] if "uniqueid" in self._file_data else None,
             "performer_ids": list(set(file_performer_ids + scene_performer_ids)),
             "tag_ids": list(set(file_tag_ids + scene_tag_ids)),
             "movie_id": file_movie_id or scene_movie_id or None,

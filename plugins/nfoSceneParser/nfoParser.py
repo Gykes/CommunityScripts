@@ -40,6 +40,9 @@ class NfoParser(AbstractParser):
                 index += 1
         return thumb_images
 
+    def __extract_nfo_uniqueid(self):
+        return self._nfo_root.findtext("uniqueid")
+
     def __read_cover_image_file(self):
         path_no_ext = os.path.splitext(self._nfo_file)[0]
         file_no_ext = os.path.split(path_no_ext)[1]
@@ -170,6 +173,7 @@ class NfoParser(AbstractParser):
             "details": self._nfo_root.findtext("plot") or self._nfo_root.findtext("outline") \
             or self._nfo_root.findtext("tagline") or self._get_default("details"),
             "studio": self._nfo_root.findtext("studio") or self._get_default("studio"),
+            "uniqueid": self.__extract_nfo_uniqueid(),
             "date": self.__extract_nfo_date() or self._get_default("date"),
             "actors": self.__extract_nfo_actors() or self._get_default("actors"),
             # Tags are merged with defaults
@@ -182,5 +186,6 @@ class NfoParser(AbstractParser):
             "scene_index": self._nfo_root.findtext("set/index") or None,
             # TODO: read multiple URL tags into array
             "urls": None if not self._nfo_root.findtext("url") else [self._nfo_root.findtext("url")],
+
         }
         return file_data
